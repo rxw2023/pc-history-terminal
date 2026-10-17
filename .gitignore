@@ -1,0 +1,20 @@
+# 渲染 / 出片临时目录
+_video/
+_voice/
+_t/
+_shots/
+_chk*/
+_g/
+
+# 成片视频不入库：58 MB，重渲一次历史里就多一份，清不掉。
+# 发布走 GitHub Releases，见 README「下载成片」。
+*.mp4
+
+# 脚本生成物（burn-subs.ps1 每次重新生成）
+tools/subs.ass
+
+# 系统垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp

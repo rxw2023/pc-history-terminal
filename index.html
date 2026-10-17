@@ -1,0 +1,2048 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PC-HISTORY POST · 个人电脑发展史</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{
+    width:100%;height:100%;overflow:hidden;background:#020403;
+    font-family:"Cascadia Mono","Consolas","SF Mono","Menlo",monospace;
+  }
+  #viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  /* 逻辑画布固定 1600x960，靠 transform 缩放到视口 */
+  #stage{
+    position:relative;width:1600px;height:960px;flex:none;
+    transform-origin:center center;background:#000;border-radius:14px;
+    box-shadow:
+      0 0 0 1px rgba(70,255,140,.10),
+      0 0 90px 10px rgba(0,0,0,.9),
+      inset 0 0 160px 30px rgba(0,0,0,.85);
+    overflow:hidden;
+  }
+  #screen{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #bloom{
+    position:absolute;inset:0;width:100%;height:100%;display:block;
+    filter:blur(7px);mix-blend-mode:screen;opacity:.55;pointer-events:none;
+  }
+  #scan{
+    position:absolute;inset:0;pointer-events:none;z-index:3;
+    background:repeating-linear-gradient(to bottom,
+      rgba(0,0,0,0) 0px, rgba(0,0,0,0) 1px,
+      rgba(0,0,0,.30) 2px, rgba(0,0,0,.30) 3px);
+    mix-blend-mode:multiply;opacity:.58;
+  }
+  #mask{
+    position:absolute;inset:0;pointer-events:none;z-index:4;opacity:.16;
+    background:repeating-linear-gradient(to right,
+      rgba(255,0,60,.55) 0px, rgba(0,255,120,.55) 1px, rgba(40,80,255,.55) 2px,
+      rgba(0,0,0,0) 3px);
+  }
+  /* 暗角：底部那几行 HUD 正好落在原来的 82% 黑里，几乎读不出来。
+     把椭圆拉大、终点透明度压到 .58，暗角感还在，但边上不再压死。 */
+  #vig{
+    position:absolute;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse 86% 96% at 50% 48%,
+      rgba(0,0,0,0) 48%, rgba(0,0,0,.16) 78%, rgba(0,0,0,.58) 100%);
+  }
+  #glass{
+    position:absolute;inset:0;pointer-events:none;z-index:6;
+    background:linear-gradient(168deg, rgba(190,255,220,.055) 0%, rgba(255,255,255,0) 32%);
+    box-shadow:inset 0 0 140px 22px rgba(0,0,0,.28);
+  }
+  #flick{position:absolute;inset:0;pointer-events:none;z-index:7;background:#7dffc0;opacity:0;mix-blend-mode:overlay}
+  #boot{
+    position:absolute;inset:0;z-index:9;background:#000;color:#33ff66;
+    display:flex;align-items:center;justify-content:center;font-size:22px;letter-spacing:2px;
+  }
+  #boot.hide{display:none}
+  #err{
+    position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    color:#ff6b6b;font-size:16px;padding:40px;text-align:center;z-index:99;
+  }
+  #jserr{
+    position:fixed;left:0;right:0;bottom:0;z-index:200;display:none;background:#2a0000;
+    color:#ff9090;font:12px/1.5 monospace;padding:8px;white-space:pre-wrap;max-height:45%;overflow:auto;
+  }
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="stage">
+    <canvas id="screen"></canvas>
+    <canvas id="bloom"></canvas>
+    <div id="scan"></div><div id="mask"></div><div id="vig"></div><div id="glass"></div>
+    <div id="flick"></div>
+    <div id="boot">PC-HISTORY POST<br><span style="font-size:14px;opacity:.6">初始化字符显示终端 ...</span></div>
+  </div>
+</div>
+<div id="err"></div>
+<div id="jserr"></div>
+
+<script>
+/* 自检：任何脚本错误都直接画在页面底部，便于无头截图排查 */
+window.__ERR__ = [];
+(function () {
+  function show() {
+    var d = document.getElementById("jserr");
+    if (!d || !window.__ERR__.length) return;
+    d.style.display = "block";
+    d.textContent = "JS ERROR\n" + window.__ERR__.join("\n");
+  }
+  window.addEventListener("error", function (e) {
+    window.__ERR__.push((e.message || "?") + "  @" + (e.filename || "").split("/").pop() + ":" + e.lineno +
+      (e.error && e.error.stack ? "\n" + e.error.stack.split("\n").slice(0, 3).join("\n") : ""));
+    show();
+  });
+  window.addEventListener("unhandledrejection", function (e) { window.__ERR__.push("REJECT " + e.reason); show(); });
+})();
+</script>
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════════════════
+   PC-HISTORY POST · 个人电脑发展史（终端风格 · ASCII 3D 科普动画）
+   结构：整部片子 = 一台机器从 1975 冷启动到今天的一次开机自检（POST）
+   渲染：点云 —— 每个盒子采样成点云 → 投影 → 3×3 超采样深度缓冲 →
+         相机空间 key/ambient/rim 光照 → 覆盖率剪影 + Sobel + 字符梯度
+         做法参考 RuiC-motion-reel 的 engine/three.py（那边是排序散射，这里换 z-buffer）
+   零依赖：整个动画就是这一个 HTML 文件
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────── 0. 版面常量 ─────────────────────────── */
+const COLS = 160, ROWS = 48, CW = 10, CH = 20;      // 文本网格 1600 x 960
+const R_HEADER = 0;
+const R_LOG0 = 2, LOG_ROWS = 9, LOG_COL = 2, LOG_W = 84;
+const M_Y0 = 8, M_ROWS = 36;                        // 3D 区 rows 8..43（720px）
+const MW = 8, MH = 16;                              // 3D 字符格（比文本更细）
+const AW = 120, AH = 45;                            // 3D 网格 120 x 45 = 5400 格
+const M_X0 = ((COLS * CW) - AW * MW) / 2;           // 3D 区水平居中 → 320px
+const R_DIV = 44, R_CAP0 = 45, R_STATUS = 47;
+const M_ASPECT = (AW * MW) / (AH * MH);             // = 960/720 = 1.3333
+
+const W = COLS * CW, H = ROWS * CH;
+const RAMP = " .:-=+*#%@";
+const NRAMP = RAMP.length;
+const NPHOS = 24;
+const FONT = '"Cascadia Mono","Consolas","SF Mono","Menlo","Microsoft YaHei",monospace';
+const FSIZE = 17;
+const MFSIZE = 15;                                  // 3D 字符字号
+
+const charCells = ch => (ch.codePointAt(0) > 0x2e80 ? 2 : 1);
+
+/* ─────────────────────────── 1. 画布 ─────────────────────────── */
+const screen = document.getElementById("screen");
+screen.width = W; screen.height = H;
+const ctx = screen.getContext("2d", { alpha: false });
+
+const bloom = document.getElementById("bloom");
+bloom.width = 400; bloom.height = 240;
+const bctx = bloom.getContext("2d");
+
+const stageEl = document.getElementById("stage");
+const Q0 = new URLSearchParams(location.search);
+/* ?zoom=Z&cx=X&cy=Y —— 调试用：把逻辑画布的某个区域放大铺满窗口 */
+const ZOOM = parseFloat(Q0.get("zoom") || "0");
+function resize() {
+  if (ZOOM > 0) {
+    const cx = parseFloat(Q0.get("cx") || "0"), cy = parseFloat(Q0.get("cy") || "0");
+    stageEl.style.transformOrigin = "0 0";
+    stageEl.style.transform = "scale(" + ZOOM + ") translate(" + (-cx) + "px," + (-cy) + "px)";
+    return;
+  }
+  const s = Math.min(innerWidth / W, innerHeight / H) * 0.97;
+  stageEl.style.transform = "scale(" + s + ")";
+}
+addEventListener("resize", resize); resize();
+
+/* ─────────────────────────── 2. 点云渲染引擎 ───────────────────────────
+   不做三角形光栅化。思路取自 RuiC-motion-reel 的 engine/three.py：
+   曲面/盒子密采样成点云，投影后散射，遮挡由逐样本深度解决 —— 没有逐三角形循环，
+   而且密集点云自带颗粒感（铜版雕刻也是这个道理）。
+
+   针对浏览器实时渲染改了两处：
+     1. 把「按深度排序后散射」换成 z-buffer。JS 里排 6 万点太贵（每次 20ms+），
+        而深度测试是 O(n)、零分配，对点云同样是精确的。
+     2. 每个字符格 3×3 超采样。覆盖率直接给出抗锯齿剪影 —— 不再需要用 Sobel
+        去猜哪儿是边界，边缘也因此干净得多。
+   光照用「相机空间」的 key + ambient + rim：光源跟着镜头走，
+   所以机型摆到任何角度都不会忽然发平。                                   */
+
+const SPACING = 0.62;        // 点云采样间距（模型单位 ≈ cm），会按预算自动缩放
+const FRONT_BIAS = 3.2;      // 正面加密：面板上的开关/软驱靠采样密度分辨，不靠几何
+const MAXN = 160;            // 单个面单方向最大采样数
+const SS = 3;                // 每格超采样倍数
+const CLOUD_BUDGET = 78000;  // 每台机器的点云上限
+
+/* 相机空间光照三件套（KEY 朝镜头偏左上，正面因此是最亮的面）
+   rim 权重刻意压低：它只该点亮轮廓，不该把顶面和侧面一起抬平 */
+const AMBIENT = 0.11, KEY_GAIN = 0.92, RIM_GAIN = 0.22, RIM_POW = 3.0;
+let KX = -0.28, KY = 0.34, KZ = -0.90;
+{ const m = Math.hypot(KX, KY, KZ); KX /= m; KY /= m; KZ /= m; }
+
+const FOV = 34;
+const TAN_Y = Math.tan(FOV * Math.PI / 360);
+
+/* 变换链：{m:3x3 行主序, t:[3]}，apply(T,p) = T.m·p + T.t */
+const ID3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+const ROOT = { m: ID3, t: [0, 0, 0] };
+function mat3mul(a, b) {
+  const o = new Array(9);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++)
+    o[r * 3 + c] = a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c];
+  return o;
+}
+function mat3rx(a) { const c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, c, -s, 0, s, c]; }
+function xchain(a, b) {
+  const am = a.m, bm = b.m, bt = b.t;
+  return {
+    m: mat3mul(am, bm),
+    t: [am[0] * bt[0] + am[1] * bt[1] + am[2] * bt[2] + a.t[0],
+        am[3] * bt[0] + am[4] * bt[1] + am[5] * bt[2] + a.t[1],
+        am[6] * bt[0] + am[7] * bt[1] + am[8] * bt[2] + a.t[2]]
+  };
+}
+function mkGroup(parent, x, y, z, rx) {
+  return xchain(parent || ROOT, { m: rx ? mat3rx(rx) : ID3, t: [x || 0, y || 0, z || 0] });
+}
+/* 盒子只登记变换，采样留到 buildBoxes() 统一做（采样密度要按全局预算定） */
+const BOXES = [], CORNERS = [];
+function mkBox(parent, o) {
+  const W = xchain(parent || ROOT, { m: ID3, t: [o.x || 0, o.y || 0, o.z || 0] });
+  const m = W.m;
+  const w = o.w === undefined ? 1 : o.w, h = o.h === undefined ? 1 : o.h, d = o.d === undefined ? 1 : o.d;
+  BOXES.push({
+    c: o.c === undefined ? 0xcccccc : o.c,
+    acc: o.acc === undefined ? 0 : o.acc,
+    /* 三个局部轴在世界空间的列向量 */
+    a: [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]],
+    t: [W.t[0], W.t[1], W.t[2]],
+    e: [w * .5, h * .5, d * .5]
+  });
+  /* 取景用的 8 个角点（相对机型原点，稍后统一平移到质心） */
+  for (let i = 0; i < 8; i++) {
+    const u = (i & 1 ? 1 : -1) * w * .5, v = (i & 2 ? 1 : -1) * h * .5, k = (i & 4 ? 1 : -1) * d * .5;
+    CORNERS.push(
+      W.t[0] + m[0] * u + m[1] * v + m[2] * k,
+      W.t[1] + m[3] * u + m[4] * v + m[5] * k,
+      W.t[2] + m[6] * u + m[7] * v + m[8] * k);
+  }
+  return null;
+}
+
+/* 六个面：法线轴 k / 符号 s / 面内两轴 p、q */
+const FACES = [
+  { k: 2, s: 1, p: 0, q: 1 }, { k: 2, s: -1, p: 0, q: 1 },
+  { k: 1, s: 1, p: 0, q: 2 }, { k: 1, s: -1, p: 0, q: 2 },
+  { k: 0, s: 1, p: 1, q: 2 }, { k: 0, s: -1, p: 1, q: 2 }
+];
+
+/* 把盒子列表采样成点云。按面分段存储，渲染时逐段做背面剔除与一次法线变换。 */
+function sampleBoxes(boxes, spacing) {
+  const px = [], py = [], pz = [], segs = [];
+  for (const b of boxes) {
+    const [ax, ay, az, bx, by, bz, cx2, cy2, cz2] = b.a;
+    const A = [[ax, ay, az], [bx, by, bz], [cx2, cy2, cz2]];
+    const r = ((b.c >> 16) & 255) / 255, g = ((b.c >> 8) & 255) / 255, bl = (b.c & 255) / 255;
+    /* 哪一面朝前（+Z）：那一面加密采样 —— 面板细节全在这一面上 */
+    for (const f of FACES) {
+      const n = A[f.k], front = (f.k === 2 && f.s > 0);
+      const sp = front ? spacing / FRONT_BIAS : spacing;
+      const na = Math.max(2, Math.min(MAXN, Math.round(b.e[f.p] * 2 / sp)));
+      const nb = Math.max(2, Math.min(MAXN, Math.round(b.e[f.q] * 2 / sp)));
+      const start = px.length;
+      const ox = b.t[0] + n[0] * f.s * b.e[f.k];
+      const oy = b.t[1] + n[1] * f.s * b.e[f.k];
+      const oz = b.t[2] + n[2] * f.s * b.e[f.k];
+      const P = A[f.p], Q = A[f.q];
+      for (let i = 0; i <= na; i++) {
+        const u = (i / na * 2 - 1) * b.e[f.p];
+        for (let j = 0; j <= nb; j++) {
+          const v = (j / nb * 2 - 1) * b.e[f.q];
+          px.push(ox + P[0] * u + Q[0] * v);
+          py.push(oy + P[1] * u + Q[1] * v);
+          pz.push(oz + P[2] * u + Q[2] * v);
+        }
+      }
+      segs.push({
+        s: start, e: px.length,
+        n: [n[0] * f.s, n[1] * f.s, n[2] * f.s],
+        r: r, g: g, b: bl, acc: b.acc,
+        /* 反照率（亮度权重）：点云的光照只看法线，同朝向的近黑凹槽与白色
+           开关会算出同一个亮度。必须把材质色折进来，面板细节才分得开。 */
+        alb: 0.299 * r + 0.587 * g + 0.114 * bl
+      });
+    }
+  }
+  return { px: px, py: py, pz: pz, segs: segs };
+}
+
+/* 机型配色（贴近真实机身色） */
+const C = {
+  altairCase: 0xa8b0ba, altairEdge: 0xbcc3cc, altairPanel: 0x5f6a7a, altairInner: 0x0e1116,
+  altairSwitch: 0xe2e6eb, ledRed: 0xff3018, ledOff: 0x5a1c14, vent: 0x767d86, feet: 0x2a2e33,
+  appleCase: 0xdad2ba, appleLid: 0xc3bba3, appleKey: 0x8d8676,
+  darkPlastic: 0x2b2823, veryDark: 0x0b0b0d, slotDark: 0x08080a,
+  crtDark: 0x0a1a0c, crtGreen: 0x3bff6c, crtBlue: 0x4a63e8, crtCyan: 0x63d9ff,
+  ibmCase: 0xd8d3c4, ibmBezel: 0xc4bfb0, ibmKey: 0xb6b0a0, ibmDark: 0x34312a,
+  c64Case: 0xc9bfa8, c64Seam: 0xb6ab93, c64Key: 0x635b4d, c64Fn: 0xd08a3c,
+  /* 1986 · Compaq Deskpro 386 */
+  d386Case: 0xd7d3c6, d386Bezel: 0xc0bcae, d386Dark: 0x3a372f, d386Key: 0xb3ad9c,
+  d386Slot: 0x101216, d386Led: 0x4cff72,
+  /* 1995 · Windows 95 PC */
+  w95Case: 0xded9c6, w95Bezel: 0xc8c2ac, w95Dark: 0x3d3a32, w95Key: 0xbcb6a4,
+  w95Slot: 0x0b0d10, w95Power: 0xffb232,
+  /* 1998 · iMac G3（邦迪蓝半透明） */
+  imacShell: 0x2ab4d8, imacDeep: 0x1a7fa4, imacDark: 0x0c2630, imacScreen: 0x86e8ff,
+  imacKey: 0x1d7d9e, imacWhite: 0xeaf7fc,
+  /* 2008 · MacBook Air */
+  airAlu: 0xc8ced6, airAluDark: 0x9ba2ab, airBlack: 0x14161a, airScreen: 0x93b9e2,
+  airKey: 0x24272b,
+  /* 2010 · iPad */
+  padAlu: 0xd4d9df, padEdge: 0xa9afb7, padBlack: 0x0e1013, padScreen: 0xa4daff,
+  /* 2012 · Raspberry Pi */
+  piPcb: 0x2f8f42, piPcbDark: 0x1c5f2c, piChip: 0x191b1e, piPort: 0x939aa2,
+  piGold: 0xd6ae44, piHeader: 0xc99a24,
+  /* 2020 · Apple M1 MacBook Air */
+  m1Alu: 0x8f939a, m1AluDark: 0x6c7077, m1Black: 0x111316, m1Screen: 0x9fc6ec,
+  m1Key: 0x1b1e22,
+  /* 2026 · AI PC */
+  aiCase: 0x3d434c, aiCaseDark: 0x24282e, aiBlack: 0x0a0c0f, aiScreen: 0x8fe6ff,
+  aiGlow: 0x55e2ff, aiViolet: 0xc06cff, aiKey: 0x191c21,
+  /* 2003 · IBM ThinkPad T40 */
+  tpBlack: 0x6a727c, tpDark: 0x0d0f12, tpBezel: 0x14171b, tpKey: 0xaeb6c1,
+  tpScreen: 0x7fa8cf, tpRed: 0xd8302c,
+  /* 2007 · ASUS Eee PC 701 */
+  eeWhite: 0xb2afa6, eeGrey: 0x7d7b75, eeBezel: 0x0c0e11, eeScreen: 0x9fd4ff, eeKey: 0xd2d0c9,
+  eeDark: 0x0a0c0e,
+  /* 2016 · 游戏本 */
+  gmCase: 0x78808c, gmDark: 0x101317, gmVent: 0xb8c0cc, gmScreen: 0x86dcff,
+  gmRgb: 0xff4a72, gmStrip: 0x54e6ff,
+  /* 2020 · Mac mini M1 */
+  mmAlu: 0xc6cbd2, mmAluDark: 0x99a0a8, mmBack: 0x17191d, mmPort: 0x828a94, mmLed: 0xf2f6ff
+};
+
+/* ─────────────────────────── 3. 四台机型建模（单位≈厘米） ─────────────────────────── */
+
+/* 1975 · MITS Altair 8800 —— 43 x 18 x 46 的开关面板盒子 */
+function buildAltair(g) {
+  mkBox(g, { w: 43, h: 17, d: 45, y: 9.2, c: C.altairCase });
+  mkBox(g, { w: 43.3, h: 1.3, d: 45.3, y: 17.1, c: C.altairEdge });        // 顶盖压边
+  for (let i = 0; i < 2; i++)                                              // 顶部散热槽
+    mkBox(g, { w: 26, h: .7, d: 1.4, y: 17.9, z: -14 + i * 6, c: C.vent });
+  mkBox(g, { w: 43.8, h: 16.8, d: 1.6, y: 9.1, z: 23.2, c: C.altairPanel });
+  mkBox(g, { w: 40.6, h: 13.6, d: .5, y: 9.1, z: 24.05, c: C.altairInner });
+  // 四排：LED / 拨动开关 / LED / 拨动开关（16 个一组）
+  const rowY = [14.6, 10.9, 6.9, 3.2];
+  for (let r = 0; r < 4; r++) {
+    const isLed = (r % 2 === 0);
+    for (let i = 0; i < 16; i++) {
+      const x = -17.4 + i * 2.32;
+      if (isLed) {
+        const on = ((i * 7 + r * 5) % 5) < 2;
+        mkBox(g, { w: 1.15, h: 1.15, d: .9, x: x, y: rowY[r], z: 24.5,
+                   c: on ? C.ledRed : C.ledOff, acc: on ? 0 : undefined });
+      } else {
+        mkBox(g, { w: 1.15, h: 3.3, d: 1.5, x: x, y: rowY[r], z: 24.55, c: C.altairSwitch });
+      }
+    }
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    mkBox(g, { w: 3, h: .8, d: 3, x: sx * 18, y: .4, z: sz * 19, c: C.feet });
+}
+
+/* 1977 · Apple ][ —— 楔形一体机 + 绿色单显 + Disk ][ 软驱 */
+function buildApple2(g) {
+  mkBox(g, { w: 38.7, h: 11, d: 30, y: 5.6, z: -8, c: C.appleCase });
+  mkBox(g, { w: 38.9, h: .7, d: 30.2, y: 11.2, z: -8, c: C.appleLid });
+  const deck = mkGroup(g, 0, 4.3, 13.5, -0.155);
+  mkBox(deck, { w: 38.7, h: 2.6, d: 18, c: C.appleCase });
+  /* 键位在 ASCII 分辨率下太小会糊成噪点，这里只保留「键盘凹槽 + 5 条键列」 */
+  mkBox(deck, { w: 36.5, h: .9, d: 15.4, y: 1.5, z: -3.2, c: C.darkPlastic });
+  for (let r = 0; r < 5; r++)
+    mkBox(deck, { w: 34.5, h: 1.25, d: 2.45, y: 2.05, z: -6.4 + r * 3.15, c: C.appleKey });
+  mkBox(deck, { w: 16, h: 1.25, d: 2.45, y: 2.05, z: 9.6, c: C.appleKey });
+  // 显示器
+  mkBox(g, { w: 30, h: 25, d: 30, y: 23.5, z: -9, c: 0xd0c8af });
+  mkBox(g, { w: 27.5, h: 22.5, d: 1.6, y: 24.4, z: 5.8, c: 0x16150f });
+  mkBox(g, { w: 23.5, h: 18.5, d: 1.1, y: 24.4, z: 6.8, c: C.crtDark });
+  mkBox(g, { w: 21.5, h: 16.5, d: .6, y: 24.4, z: 7.5, c: C.crtGreen, acc: 0 });
+  // Disk ][
+  mkBox(g, { w: 15, h: 8.6, d: 21, x: 24.5, y: 4.3, z: 6, c: 0xcac2aa });
+  mkBox(g, { w: 12.5, h: 6.2, d: 1.2, x: 24.5, y: 4.3, z: 16.7, c: 0x1b1a16 });
+  mkBox(g, { w: 5.6, h: 1.1, d: 1.8, x: 24.5, y: 5.4, z: 17.1, c: C.slotDark, acc: 1 });
+}
+
+/* 1981 · IBM PC 5150 */
+function buildIBMPC(g) {
+  mkBox(g, { w: 50.8, h: 15, d: 42, y: 7.6, c: C.ibmCase });
+  mkBox(g, { w: 51.2, h: 15.3, d: .9, y: 7.6, z: 21.2, c: C.ibmBezel });
+  for (let i = 0; i < 2; i++) {                                    // 两台 5.25" 软驱
+    const y = 10.9 - i * 7.5;
+    mkBox(g, { w: 13.8, h: 6.7, d: 1.9, x: 15.6, y: y, z: 22.0, c: C.ibmDark });
+    mkBox(g, { w: 9.2, h: 1.2, d: 2.3, x: 15.6, y: y + .9, z: 22.5, c: C.slotDark });
+    mkBox(g, { w: 1.7, h: 2.7, d: 1.5, x: 10.6, y: y, z: 22.2, c: 0x8d8776 });
+  }
+  mkBox(g, { w: 3.4, h: 4.6, d: 1.9, x: -20.5, y: 9.2, z: 22.0, c: 0x8d8776 });  // 电源开关
+  mkBox(g, { w: 1.4, h: 1.4, d: 1.1, x: -16.3, y: 9.2, z: 22.2, c: C.crtGreen, acc: 0 });
+  /* 键盘：凹槽 + 6 条键列（不建模单颗键帽，否则在字符分辨率下糊成噪点） */
+  mkBox(g, { w: 50, h: 3.4, d: 18, y: 1.8, z: 33, c: C.ibmCase });
+  mkBox(g, { w: 47, h: .9, d: 15.6, y: 3.1, z: 32.4, c: C.ibmDark });
+  for (let r = 0; r < 6; r++)
+    mkBox(g, { w: r < 5 ? 45 : 22, h: 1.25, d: 2.45,
+               x: r < 5 ? 0 : 11.5, y: 3.7, z: 25.6 + r * 3.05, c: C.ibmKey });
+  // 5151 单色显示器
+  mkBox(g, { w: 36, h: 26, d: 34, y: 28.2, z: -2, c: C.ibmCase });
+  mkBox(g, { w: 31.5, h: 22, d: 1.8, y: 28.8, z: 15.4, c: 0x37342c });
+  mkBox(g, { w: 27.5, h: 18, d: 1.1, y: 28.8, z: 16.4, c: C.crtDark });
+  mkBox(g, { w: 25.5, h: 16, d: .6, y: 28.8, z: 17.0, c: C.crtGreen, acc: 1 });
+  mkBox(g, { w: 36.4, h: 1.3, d: 34.4, y: 40.6, z: -2, c: C.ibmBezel });
+}
+
+/* 1982 · Commodore 64 + 1541 软驱 */
+function buildC64(g) {
+  /* 楔形机身：前低后高 */
+  mkBox(g, { w: 40.4, h: 3.0, d: 21.6, y: 1.5, c: C.c64Case });
+  mkBox(g, { w: 40.4, h: 3.4, d: 9.0, y: 4.5, z: -6.3, c: C.c64Case });
+  mkBox(g, { w: 40.6, h: .6, d: 21.8, y: 2.95, c: C.c64Seam });
+  /* 键盘：凹槽 + 4 条键列（不建模单颗键帽） */
+  const deck = mkGroup(g, 0, 3.0, 0.5, -0.085);
+  mkBox(deck, { w: 36.5, h: .8, d: 14.6, y: .35, z: .4, c: C.darkPlastic });
+  for (let r = 0; r < 4; r++)
+    mkBox(deck, { w: 34.5, h: 1.1, d: 2.5, y: .95, z: -3.4 + r * 2.95, c: C.c64Key });
+  mkBox(deck, { w: 15, h: 1.1, d: 2.5, y: .95, z: 8.6, c: C.c64Key });
+  mkBox(deck, { w: 8.4, h: 1.4, d: 2.5, x: 13.5, y: 1.1, z: 8.6, c: C.c64Fn });
+  mkBox(g, { w: .9, h: 2.2, d: 6.4, x: 19.4, y: 5.6, z: -4.6, c: C.slotDark });  // 卡带口
+  // 1541 软驱放在机身正后方（放在侧面会让整机包围盒变得又扁又宽，主机被缩小）
+  mkBox(g, { w: 31, h: 8.0, d: 17, x: 0, y: 4.0, z: -20.5, c: C.c64Case });
+  mkBox(g, { w: 31.2, h: 1.0, d: 17.2, x: 0, y: 7.7, z: -20.5, c: C.c64Seam });
+  mkBox(g, { w: 10.4, h: 4.6, d: 1.4, x: -6, y: 3.7, z: -11.9, c: C.ibmDark });
+  mkBox(g, { w: 6.2, h: .9, d: 1.8, x: -6, y: 4.4, z: -11.5, c: C.slotDark, acc: 0 });
+  mkBox(g, { w: 1.8, h: 1.8, d: 1.2, x: 3, y: 3.5, z: -11.8, c: C.crtCyan, acc: 1 });
+}
+
+/* 1986 · Compaq Deskpro 386 —— 卧式 AT 主机 + 14" VGA + 键盘 */
+function buildDeskpro(g) {
+  mkBox(g, { w: 52, h: 15, d: 44, y: 8, c: C.d386Case });
+  mkBox(g, { w: 52.3, h: .9, d: 44.3, y: 15.3, c: C.d386Bezel });
+  mkBox(g, { w: 49, h: 12.4, d: 1.4, y: 8, z: 22.4, c: C.d386Bezel });
+  mkBox(g, { w: 45, h: 10, d: .5, y: 8, z: 23.1, c: C.d386Dark });       // 面板凹槽
+  for (let i = 0; i < 2; i++) {                                           // 两层 5.25" 位
+    mkBox(g, { w: 15, h: 4.4, d: 1.2, x: -13.5, y: 11.6 - i * 5.2, z: 23.2, c: C.d386Bezel });
+    mkBox(g, { w: 15, h: .75, d: 1.7, x: -13.5, y: 12.3 - i * 5.2, z: 23.5, c: C.d386Slot });
+    mkBox(g, { w: 2.2, h: 1.6, d: 1.4, x: -20.6, y: 11.6 - i * 5.2, z: 23.4, c: C.d386Dark });
+  }
+  mkBox(g, { w: 11, h: 3.4, d: 1.2, x: 4, y: 5.4, z: 23.2, c: C.d386Bezel });   // 3.5" 位
+  mkBox(g, { w: 11, h: .6, d: 1.7, x: 4, y: 5.9, z: 23.5, c: C.d386Slot });
+  mkBox(g, { w: 3.2, h: 2.8, d: 1.3, x: 17.5, y: 12, z: 23.2, c: C.d386Dark }); // 电源开关
+  mkBox(g, { w: 1.4, h: 1.4, d: 1.1, x: 21.4, y: 12.6, z: 23.3, c: C.d386Led, acc: 0 });
+  mkBox(g, { w: 1.4, h: 1.4, d: 1.1, x: 21.4, y: 10.0, z: 23.3, c: 0x2c2f34 }); // 硬盘灯（灭）
+  for (let i = 0; i < 4; i++)                                             // 顶面散热栅
+    mkBox(g, { w: 30, h: .7, d: 1.6, y: 15.6, z: -10 + i * 6.4, c: C.d386Slot });
+  /* 键盘 */
+  mkBox(g, { w: 48, h: 3.4, d: 17.5, y: 1.9, z: 33, c: C.d386Case });
+  mkBox(g, { w: 45, h: .9, d: 15.2, y: 3.2, z: 32.4, c: C.d386Dark });
+  for (let r = 0; r < 6; r++)
+    mkBox(g, { w: r < 5 ? 43 : 21, h: 1.25, d: 2.4, x: r < 5 ? 0 : 11,
+               y: 3.8, z: 25.6 + r * 2.95, c: C.d386Key });
+  /* 14" VGA 显示器（架在主机上） */
+  mkBox(g, { w: 36, h: 29, d: 38, y: 30.5, z: -1, c: C.d386Case });
+  mkBox(g, { w: 32, h: 24.5, d: 1.6, y: 31, z: 18.3, c: C.d386Dark });
+  mkBox(g, { w: 28.5, h: 20.5, d: 1.0, y: 31, z: 19.2, c: C.crtDark });
+  mkBox(g, { w: 26.5, h: 18.5, d: .5, y: 31, z: 19.7, c: C.crtGreen, acc: 1 });
+  mkBox(g, { w: 36.4, h: 1.5, d: 38.4, y: 45.7, z: -1, c: C.d386Bezel });
+}
+
+/* 1995 · Windows 95 PC —— 米白迷你塔 + 15" CRT 摞在上面 + 键盘 */
+function buildWin95(g) {
+  mkBox(g, { w: 21, h: 40, d: 44, y: 20, c: C.w95Case });
+  mkBox(g, { w: 21.4, h: 1.2, d: 44.4, y: 40.4, c: C.w95Bezel });
+  mkBox(g, { w: 19, h: 38.4, d: 1.3, y: 20, z: 22.3, c: C.w95Bezel });      // 前面板
+  mkBox(g, { w: 16.4, h: 35, d: .4, y: 20.4, z: 22.9, c: C.w95Dark });      // 面板凹槽
+  mkBox(g, { w: 15, h: 4.6, d: 1.4, y: 33.4, z: 23.0, c: C.w95Dark });      // 5.25" 光驱
+  mkBox(g, { w: 13, h: 1.1, d: 1.8, y: 33.4, z: 23.3, c: C.w95Slot });
+  mkBox(g, { w: 9.6, h: .5, d: 2.0, y: 33.4, z: 23.5, c: C.w95Slot });
+  mkBox(g, { w: 2.0, h: 1.4, d: 1.1, x: 5.6, y: 31.6, z: 23.2, c: 0x6b665a });
+  mkBox(g, { w: 15, h: 3.0, d: 1.4, y: 27.4, z: 23.0, c: C.w95Dark });      // 3.5" 软驱
+  mkBox(g, { w: 9.6, h: 1.1, d: 1.8, x: -1.6, y: 27.4, z: 23.3, c: C.w95Slot });
+  mkBox(g, { w: 1.8, h: 1.5, d: 1.1, x: 4.4, y: 27.4, z: 23.2, c: 0x6b665a });
+  mkBox(g, { w: 5.0, h: 3.2, d: 1.4, x: -5, y: 37.6, z: 23.0, c: C.w95Dark });  // 电源键
+  mkBox(g, { w: 1.5, h: 1.5, d: 1.1, x: 1.6, y: 37.8, z: 23.2, c: C.w95Power, acc: 0 });
+  mkBox(g, { w: 1.5, h: 1.5, d: 1.1, x: 5.0, y: 37.8, z: 23.2, c: 0x35c25e, acc: 1 });
+  for (let i = 0; i < 4; i++)                                               // 进风栅
+    mkBox(g, { w: 13, h: .6, d: .8, y: 18 + i * 1.5, z: 23.1, c: C.w95Slot });
+  /* 15" CRT 显示器架在塔顶 */
+  const crt = mkGroup(g, 0, 41, -1);
+  mkBox(crt, { w: 38, h: 32, d: 40, y: 16, c: C.w95Case });
+  mkBox(crt, { w: 34, h: 27.5, d: 1.6, y: 16.4, z: 19.2, c: C.w95Dark });
+  mkBox(crt, { w: 30.5, h: 23.5, d: 1.0, y: 16.4, z: 20.1, c: C.crtDark });
+  mkBox(crt, { w: 28.5, h: 21.5, d: .5, y: 16.4, z: 20.6, c: C.crtGreen, acc: 2 });
+  mkBox(crt, { w: 38.4, h: 1.5, d: 40.4, y: 32.4, c: C.w95Bezel });
+  /* 键盘 */
+  mkBox(g, { w: 46, h: 3.2, d: 17, y: 1.8, z: 34, c: C.w95Case });
+  mkBox(g, { w: 43, h: .9, d: 14.8, y: 3.0, z: 33.4, c: C.w95Dark });
+  for (let r = 0; r < 6; r++)
+    mkBox(g, { w: r < 5 ? 41 : 20, h: 1.2, d: 2.3, x: r < 5 ? 0 : 10.5,
+               y: 3.6, z: 26.6 + r * 2.9, c: C.w95Key });
+}
+
+/* 1998 · iMac G3 —— 蛋形一体机，半透明邦迪蓝 */
+function buildiMac(g) {
+  /* 蛋形后背：10 层薄板按圆润剖面铺开，点云渲染下自然融成弧面 */
+  for (let i = 0; i < 10; i++) {
+    const t = i / 9;
+    const s = Math.sin(Math.PI * (0.15 + 0.70 * t));
+    mkBox(g, { w: 23 + 15 * s, h: 4.2, d: 14 + 24 * s,
+               y: 4.2 + i * 4.1, z: -13 * s + 2, c: i < 3 ? C.imacDeep : C.imacShell });
+  }
+  mkBox(g, { w: 22, h: 3.6, d: 24, y: 2.0, z: 2, c: C.imacDeep });          // 底座
+  /* 正面：蓝色壳 + 深色屏框 + CRT */
+  mkBox(g, { w: 33, h: 31, d: 2.6, y: 21, z: 16.4, c: C.imacShell });
+  mkBox(g, { w: 30.5, h: 28.5, d: 1.4, y: 21, z: 17.9, c: C.imacDark });
+  mkBox(g, { w: 27.5, h: 20.5, d: .8, y: 22.6, z: 18.7, c: C.crtDark });
+  mkBox(g, { w: 26, h: 19, d: .5, y: 22.6, z: 19.1, c: C.imacScreen, acc: 1 });
+  mkBox(g, { w: 30.5, h: 7.2, d: 1.2, y: 6.6, z: 18.2, c: C.imacShell });   // 下唇
+  mkBox(g, { w: 20, h: .8, d: 1.7, y: 8.8, z: 18.6, c: C.imacDark });       // 吸入式光驱缝
+  mkBox(g, { w: 2.8, h: 1.6, d: 1.1, x: 12.4, y: 4.6, z: 18.6, c: C.imacWhite });
+  /* 键盘 + 蛋形鼠标 */
+  mkBox(g, { w: 32, h: 2.2, d: 12.5, y: 1.6, z: 30, c: C.imacKey });
+  mkBox(g, { w: 30, h: .6, d: 10.6, y: 2.5, z: 29.6, c: C.imacDark });
+  for (let r = 0; r < 4; r++)
+    mkBox(g, { w: 28, h: .9, d: 2.0, y: 2.9, z: 25.4 + r * 2.5, c: C.imacWhite });
+  mkBox(g, { w: 5.6, h: 2.2, d: 8.4, x: 22, y: 1.8, z: 31, c: C.imacWhite });
+}
+
+/* 2008 · MacBook Air —— 21.3mm 最厚处的一体成型楔形本 */
+function buildAir(g) {
+  /* 楔形：前缘 0.4cm → 后缘 1.94cm，三级台阶 */
+  mkBox(g, { w: 32.5, h: .45, d: 8.0, y: .23, z: 7.35, c: C.airAlu });
+  mkBox(g, { w: 32.5, h: 1.00, d: 8.0, y: .50, z: -.65, c: C.airAlu });
+  mkBox(g, { w: 32.5, h: 1.90, d: 6.7, y: .95, z: -8.0, c: C.airAlu });
+  mkBox(g, { w: 32.6, h: .18, d: 22.7, y: 1.90, z: 0, c: C.airAluDark });    // 顶面高光边
+  /* 键盘凹槽 + 6 条键列（不建单颗键帽） */
+  mkBox(g, { w: 28.6, h: .30, d: 11.6, y: 1.86, z: -1.2, c: C.airBlack });
+  for (let r = 0; r < 5; r++)
+    mkBox(g, { w: 28.0, h: .30, d: 2.00, y: 1.98, z: -6.2 + r * 2.35, c: C.airKey });
+  mkBox(g, { w: 28.0, h: .30, d: 1.70, y: 1.98, z: 5.4, c: C.airKey });
+  mkBox(g, { w: 14.4, h: .22, d: 9.4, y: 1.84, z: 4.5, c: C.airAluDark });  // 触控板
+  /* 屏幕：铰链在后方，向后倾 105° */
+  const lid = mkGroup(g, 0, 1.86, -11.0, -0.30);   // 屏幕立起来、只向后倾 17°
+  mkBox(lid, { w: 32.5, h: 22.7, d: .42, y: 11.35, c: C.airAlu });
+  mkBox(lid, { w: 32.56, h: 22.76, d: .10, y: 11.35, z: -.20, c: C.airAluDark });
+  mkBox(lid, { w: 30.6, h: 20.6, d: .16, y: 11.35, z: .28, c: C.airBlack });
+  mkBox(lid, { w: 29.0, h: 18.8, d: .10, y: 11.35, z: .38, c: C.airScreen, acc: 0 });
+  mkBox(lid, { w: .6, h: .6, d: .12, y: 21.0, z: .40, c: C.airBlack });      // 摄像头
+}
+
+/* 2010 · iPad —— 一块玻璃 + 一块铝 */
+function buildiPad(g) {
+  const t = mkGroup(g, 0, 0, 0, -0.70);                                     // 像架在支架上一样后仰，画面才不会是一根竖条
+  mkBox(t, { w: 19.0, h: 24.3, d: .86, y: 12.4, c: C.padAlu });             // 铝背
+  mkBox(t, { w: 19.06, h: 24.36, d: .16, y: 12.4, z: .38, c: C.padEdge });  // 倒角边
+  mkBox(t, { w: 18.5, h: 23.8, d: .18, y: 12.4, z: .52, c: C.padBlack });   // 黑边
+  mkBox(t, { w: 14.9, h: 19.9, d: .10, y: 12.9, z: .60, c: C.padScreen, acc: 0 });
+  mkBox(t, { w: 1.7, h: 1.7, d: .12, y: 1.9, z: .62, c: C.padEdge });       // Home 键
+  mkBox(t, { w: .55, h: .55, d: .12, y: 23.1, z: .62, c: C.padBlack });     // 前摄
+  mkBox(t, { w: .5, h: .5, d: .12, y: 20.6, z: -.45, c: C.padBlack });      // 静音键
+}
+
+/* 2012 · Raspberry Pi —— 信用卡大小的裸板 */
+function buildPi(g) {
+  mkBox(g, { w: 8.56, h: .16, d: 5.60, y: .08, c: C.piPcb });               // PCB
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    mkBox(g, { w: .70, h: .26, d: .70, x: sx * 3.55, y: .13, z: sz * 2.15, c: C.piGold });
+  mkBox(g, { w: 5.10, h: .86, d: .56, x: -1.40, y: .55, z: 2.30, c: C.piChip });   // 40 针 GPIO
+  mkBox(g, { w: 5.10, h: .26, d: .56, x: -1.40, y: .96, z: 2.30, c: C.piHeader });
+  mkBox(g, { w: 1.50, h: .32, d: 1.50, x: -.55, y: .30, z: -.35, c: C.piChip });   // SoC
+  mkBox(g, { w: 1.15, h: .22, d: 1.00, x: 1.30, y: .24, z: -.70, c: C.piChip });   // 内存
+  mkBox(g, { w: .95, h: .20, d: .90, x: -.10, y: .23, z: -1.90, c: C.piChip });
+  /* 接口：双 USB / 以太网 / HDMI / 音频 / micro-USB 供电 */
+  mkBox(g, { w: 1.45, h: 1.62, d: 1.72, x: 2.42, y: .93, z: 1.80, c: C.piPort });
+  mkBox(g, { w: 1.45, h: 1.62, d: 1.72, x: 2.42, y: .93, z: -.05, c: C.piPort });
+  mkBox(g, { w: 1.62, h: 1.34, d: 1.60, x: 1.05, y: .79, z: -1.95, c: C.piPort });
+  mkBox(g, { w: 1.52, h: .62, d: .92, x: -1.40, y: .43, z: -2.32, c: C.piPort });
+  mkBox(g, { w: .78, h: .52, d: .84, x: -2.95, y: .38, z: -2.30, c: C.piChip });
+  mkBox(g, { w: .82, h: .46, d: .92, x: -3.85, y: .35, z: -2.25, c: C.piPort });
+  mkBox(g, { w: 1.10, h: .30, d: .55, x: -3.60, y: .23, z: 1.30, c: C.piGold });   // SD 卡
+  for (let i = 0; i < 5; i++)                                                       // 电容
+    mkBox(g, { w: .42, h: .62, d: .42, x: 3.30, y: .40, z: -1.3 + i * .55, c: C.piChip });
+}
+
+/* 2020 · Apple M1 MacBook Air —— 无风扇楔形本，深空灰 */
+function buildM1(g) {
+  mkBox(g, { w: 30.41, h: .42, d: 7.6, y: .21, z: 6.82, c: C.m1Alu });
+  mkBox(g, { w: 30.41, h: .98, d: 7.6, y: .49, z: -.78, c: C.m1Alu });
+  mkBox(g, { w: 30.41, h: 1.61, d: 6.04, y: .81, z: -7.60, c: C.m1Alu });
+  mkBox(g, { w: 30.5, h: .16, d: 21.24, y: 1.62, z: 0, c: C.m1AluDark });
+  mkBox(g, { w: 27.0, h: .28, d: 11.0, y: 1.58, z: -1.3, c: C.m1Black });
+  for (let r = 0; r < 5; r++)
+    mkBox(g, { w: 26.4, h: .28, d: 1.92, y: 1.70, z: -6.1 + r * 2.24, c: C.m1Key });
+  mkBox(g, { w: 26.4, h: .28, d: 1.62, y: 1.70, z: 4.9, c: C.m1Key });
+  mkBox(g, { w: 13.2, h: .20, d: 8.6, y: 1.56, z: 4.0, c: C.m1AluDark });   // 触控板
+  const lid = mkGroup(g, 0, 1.58, -10.6, -0.30);
+  mkBox(lid, { w: 30.41, h: 21.24, d: .41, y: 10.62, c: C.m1Alu });
+  mkBox(lid, { w: 30.5, h: 21.32, d: .10, y: 10.62, z: -.20, c: C.m1AluDark });
+  mkBox(lid, { w: 28.6, h: 19.2, d: .16, y: 10.62, z: .28, c: C.m1Black });
+  mkBox(lid, { w: 27.2, h: 17.6, d: .10, y: 10.62, z: .38, c: C.m1Screen, acc: 0 });
+  mkBox(lid, { w: .55, h: .55, d: .12, y: 19.6, z: .40, c: C.m1Black });
+}
+
+/* 2026 · AI PC —— 本地推理走进个人电脑：深色机身 + 一条会呼吸的算力光带 */
+function buildAIPC(g) {
+  mkBox(g, { w: 31.6, h: .40, d: 8.2, y: .20, z: 7.1, c: C.aiCase });
+  mkBox(g, { w: 31.6, h: 1.00, d: 8.2, y: .50, z: -.9, c: C.aiCase });
+  mkBox(g, { w: 31.6, h: 1.72, d: 6.6, y: .86, z: -7.9, c: C.aiCase });
+  mkBox(g, { w: 31.7, h: .16, d: 22.4, y: 1.72, z: 0, c: C.aiCaseDark });
+  /* 前缘光带：算力状态指示 */
+  mkBox(g, { w: 30.0, h: .26, d: .30, y: .28, z: 11.3, c: C.aiGlow, acc: 0 });
+  mkBox(g, { w: 6.0, h: .30, d: .34, x: 11.5, y: .30, z: 11.3, c: C.aiViolet, acc: 1 });
+  /* 键盘 + 大触控板 */
+  mkBox(g, { w: 28.0, h: .26, d: 11.2, y: 1.68, z: -1.5, c: C.aiBlack });
+  for (let r = 0; r < 5; r++)
+    mkBox(g, { w: 27.4, h: .26, d: 1.96, y: 1.80, z: -6.5 + r * 2.30, c: C.aiKey });
+  mkBox(g, { w: 27.4, h: .26, d: 1.66, y: 1.80, z: 4.7, c: C.aiKey });
+  mkBox(g, { w: 14.0, h: .18, d: 9.0, y: 1.66, z: 4.2, c: C.aiCaseDark });
+  const lid = mkGroup(g, 0, 1.68, -11.0, -0.28);
+  mkBox(lid, { w: 31.6, h: 21.9, d: .40, y: 10.95, c: C.aiCase });
+  mkBox(lid, { w: 31.7, h: 22.0, d: .10, y: 10.95, z: -.20, c: C.aiCaseDark });
+  mkBox(lid, { w: 29.8, h: 20.0, d: .16, y: 10.95, z: .26, c: C.aiBlack });
+  mkBox(lid, { w: 28.4, h: 18.4, d: .10, y: 10.95, z: .36, c: C.aiScreen, acc: 2 });
+  /* 背盖上的 NPU 徽标（三格，亮度递减） */
+  mkBox(lid, { w: 1.1, h: 1.1, d: .10, x: -1.6, y: 9.6, z: -.28, c: C.aiGlow, acc: 0 });
+  mkBox(lid, { w: 1.1, h: 1.1, d: .10, x: 0, y: 9.6, z: -.28, c: C.aiViolet, acc: 1 });
+  mkBox(lid, { w: 1.1, h: 1.1, d: .10, x: 1.6, y: 9.6, z: -.28, c: C.aiCaseDark });
+}
+
+/* 2003 · IBM ThinkPad T40 —— 全黑、方正、4:3 厚边框，键盘正中一颗红点 */
+function buildThinkPad(g) {
+  mkBox(g, { w: 31.1, h: .55, d: 25.5, y: .28, c: C.tpBlack });
+  mkBox(g, { w: 31.1, h: 2.25, d: 25.5, y: 1.66, c: C.tpBlack });         // 实打实的厚机身
+  mkBox(g, { w: 31.3, h: .20, d: 25.7, y: 2.86, c: C.tpDark });            // 顶面接缝
+  /* 键盘：凹槽 + 6 条键列 */
+  mkBox(g, { w: 26.4, h: .26, d: 12.4, y: 2.92, z: -1.4, c: C.tpDark });
+  for (let r = 0; r < 5; r++)
+    mkBox(g, { w: 25.6, h: .26, d: 2.00, y: 3.04, z: -6.5 + r * 2.40, c: C.tpKey });
+  mkBox(g, { w: 25.6, h: .26, d: 1.75, y: 3.04, z: 5.5, c: C.tpKey });
+  /* 红色 TrackPoint：键盘正中那颗「小红点」——ThinkPad 唯一的色块 */
+  mkBox(g, { w: 1.40, h: 1.10, d: 1.40, x: 0, y: 3.42, z: -2.4, c: C.tpRed, acc: 1 });
+  mkBox(g, { w: 13.0, h: .18, d: 8.0, y: 2.86, z: 8.4, c: C.tpDark });     // 触控板
+  /* 屏幕：4:3、厚边框，翻起来 105° */
+  const lid = mkGroup(g, 0, 2.92, -12.2, -0.28);
+  mkBox(lid, { w: 31.1, h: 22.4, d: .55, y: 11.2, c: C.tpBlack });
+  mkBox(lid, { w: 31.16, h: 22.46, d: .12, y: 11.2, z: -.24, c: C.tpDark });
+  mkBox(lid, { w: 29.6, h: 20.9, d: .16, y: 11.2, z: .34, c: C.tpBezel });
+  mkBox(lid, { w: 25.4, h: 19.0, d: .10, y: 11.2, z: .44, c: C.tpScreen, acc: 0 });
+  mkBox(lid, { w: .55, h: .55, d: .12, y: 20.3, z: .46, c: C.tpDark });
+}
+
+/* 2007 · ASUS Eee PC 701 —— 22.5cm 的小白本，7 英寸屏配一圈巨大黑边 */
+function buildEeePC(g) {
+  mkBox(g, { w: 22.5, h: .60, d: 16.5, y: .30, c: C.eeWhite });
+  mkBox(g, { w: 22.5, h: 2.05, d: 16.5, y: 1.62, c: C.eeWhite });
+  mkBox(g, { w: 22.7, h: .18, d: 16.7, y: 2.72, c: C.eeGrey });
+  mkBox(g, { w: 19.2, h: .24, d: 7.8, y: 2.76, z: -.8, c: C.eeDark });     // 键盘凹槽
+  for (let r = 0; r < 4; r++)
+    mkBox(g, { w: 18.4, h: .24, d: 1.42, y: 2.88, z: -3.7 + r * 1.82, c: C.eeKey });
+  mkBox(g, { w: 18.4, h: .24, d: 1.28, y: 2.88, z: 2.55, c: C.eeKey });
+  mkBox(g, { w: 8.6, h: .16, d: 5.0, y: 2.74, z: 5.5, c: C.eeGrey });      // 触控板
+  /* 屏盖：7 英寸屏装在 22.5cm 宽的盖子里，黑边宽得离谱 */
+  const lid = mkGroup(g, 0, 2.76, -7.9, -0.32);
+  mkBox(lid, { w: 22.5, h: 15.4, d: .50, y: 7.7, c: C.eeWhite });
+  mkBox(lid, { w: 22.56, h: 15.46, d: .12, y: 7.7, z: -.22, c: C.eeGrey });
+  mkBox(lid, { w: 21.5, h: 14.5, d: .16, y: 7.7, z: .32, c: C.eeBezel });
+  mkBox(lid, { w: 15.2, h: 8.9, d: .10, y: 8.1, z: .42, c: C.eeScreen, acc: 0 });
+  mkBox(lid, { w: .50, h: .50, d: .12, y: 14.0, z: .44, c: C.eeBezel });   // 摄像头
+}
+
+/* 2016 · 游戏本 —— 越做越厚那条路线：双风扇、侧出风、RGB 键列 */
+function buildGaming(g) {
+  mkBox(g, { w: 39.0, h: .60, d: 27.0, y: .30, c: C.gmCase });
+  mkBox(g, { w: 39.0, h: 2.10, d: 27.0, y: 1.65, c: C.gmCase });
+  mkBox(g, { w: 39.2, h: .22, d: 27.2, y: 2.81, c: C.gmDark });            // 顶面接缝
+  /* 尾部抬高的排气模块 + 两对格栅 */
+  mkBox(g, { w: 39.0, h: 3.20, d: 3.4, y: 1.72, z: -13.4, c: C.gmDark });
+  for (let i = 0; i < 2; i++)
+    for (let k = 0; k < 2; k++)
+      mkBox(g, { w: 13.2, h: .58, d: 1.1, x: -10.2 + i * 20.4, y: 1.25 + k * .78, z: -14.9, c: C.gmVent });
+  /* 侧面出风口：厚本的招牌 */
+  for (const sx of [-1, 1])
+    for (let i = 0; i < 4; i++)
+      mkBox(g, { w: .70, h: 1.35, d: 1.7, x: sx * 19.55, y: 1.70, z: -8.2 + i * 2.5, c: C.gmVent });
+  /* 键盘：凹槽 + 6 条 RGB 键列 */
+  mkBox(g, { w: 33.0, h: .28, d: 12.8, y: 2.84, z: -1.0, c: C.gmDark });
+  for (let r = 0; r < 5; r++)
+    mkBox(g, { w: 32.0, h: .28, d: 2.04, y: 2.98, z: -6.0 + r * 2.42, c: C.gmRgb, acc: 0 });
+  mkBox(g, { w: 32.0, h: .28, d: 1.70, y: 2.98, z: 5.9, c: C.gmRgb, acc: 0 });
+  mkBox(g, { w: 15.0, h: .16, d: 9.0, y: 2.82, z: 9.2, c: C.gmDark });     // 触控板
+  /* 前缘灯带 */
+  mkBox(g, { w: 34.0, h: .42, d: .34, y: .58, z: 13.6, c: C.gmStrip, acc: 1 });
+  const lid = mkGroup(g, 0, 2.86, -13.0, -0.26);
+  mkBox(lid, { w: 39.0, h: 23.0, d: .60, y: 11.5, c: C.gmCase });
+  mkBox(lid, { w: 39.06, h: 23.06, d: .12, y: 11.5, z: -.26, c: C.gmDark });
+  mkBox(lid, { w: 37.4, h: 21.4, d: .16, y: 11.5, z: .36, c: C.gmDark });
+  mkBox(lid, { w: 35.2, h: 19.8, d: .10, y: 11.6, z: .46, c: C.gmScreen, acc: 2 });
+  mkBox(lid, { w: .60, h: .60, d: .12, y: 21.0, z: .48, c: C.gmDark });
+}
+
+/* 2020 · Mac mini M1 —— 19.7cm 见方的铝盒子：主板不存在了，只剩一颗 SoC */
+function buildMacMini(g) {
+  mkBox(g, { w: 19.7, h: 3.20, d: 19.7, y: 1.60, c: C.mmAlu });
+  mkBox(g, { w: 19.92, h: .38, d: 19.92, y: 3.39, c: C.mmAluDark });      // 顶部倒角
+  mkBox(g, { w: 19.40, h: .26, d: 19.40, y: 3.66, c: C.mmAlu });           // 顶面
+  mkBox(g, { w: 8.60, h: .10, d: 8.60, y: 3.82, c: C.mmAluDark });         // 顶面凹版
+  mkBox(g, { w: 19.7, h: .30, d: .34, y: .34, z: 9.86, c: C.mmAluDark });  // 底部散热缝
+  /* 朝着镜头的那一面 = 背面接口排（Mac mini 最有信息量的一面） */
+  /* 这一面在 ASCII 分辨率下只有三四格高，接口必须画得比真实比例夸张一倍，
+     否则整台机器只剩「一块铁板」，读不出是什么 */
+  mkBox(g, { w: 18.2, h: 2.80, d: .26, y: 1.80, z: 9.90, c: C.mmBack });
+  mkBox(g, { w: 1.50, h: 1.70, d: .40, x: -7.8, y: 1.80, z: 9.98, c: C.mmPort });   // 电源
+  mkBox(g, { w: 2.20, h: 1.50, d: .40, x: -5.5, y: 1.80, z: 9.98, c: C.mmPort });   // 以太网
+  mkBox(g, { w: 1.20, h: 1.70, d: .40, x: -3.2, y: 1.80, z: 9.98, c: C.mmPort });   // HDMI
+  for (let i = 0; i < 2; i++)
+    mkBox(g, { w: 1.05, h: 1.05, d: .40, x: -1.1 + i * 1.80, y: 1.80, z: 9.98, c: C.mmPort });
+  for (let i = 0; i < 2; i++)
+    mkBox(g, { w: 1.30, h: 1.15, d: .40, x: 2.0 + i * 2.00, y: 1.80, z: 9.98, c: C.mmPort });
+  mkBox(g, { w: 1.05, h: 1.40, d: .40, x: 5.8, y: 1.80, z: 9.98, c: C.mmPort });   // 耳机
+  mkBox(g, { w: 3.00, h: .30, d: .42, x: 7.6, y: 3.05, z: 9.98, c: C.mmLed, acc: 0 }); // 电源灯
+}
+
+/* 归一化：盒子的包围盒中心移到原点，返回取景用的角点与真实投影尺寸 */
+function normalize(boxes, corners) {
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (let i = 0; i < corners.length; i += 3) {
+    const x = corners[i], y = corners[i + 1], z = corners[i + 2];
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+    if (z < z0) z0 = z; if (z > z1) z1 = z;
+  }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+  for (const b of boxes) { b.t[0] -= cx; b.t[1] -= cy; b.t[2] -= cz; }
+  const pts = new Float32Array(corners.length);
+  for (let i = 0; i < corners.length; i += 3) {
+    pts[i] = corners[i] - cx; pts[i + 1] = corners[i + 1] - cy; pts[i + 2] = corners[i + 2] - cz;
+  }
+  let R = 0;
+  for (let i = 0; i < pts.length; i += 3)
+    R = Math.max(R, Math.hypot(pts[i], pts[i + 2]));
+  return {
+    R: R, h: y1 - y0,
+    wx: x1 - x0, wy: y1 - y0, wz: z1 - z0,
+    pts: pts
+  };
+}
+
+/* ─────────────────────────── 4. 分镜数据 ─────────────────────────── */
+const POST_W = 80;
+function pl(label, value) {
+  const l = String(label).toUpperCase(), v = String(value).toUpperCase(), tail = " OK";
+  const room = POST_W - l.length - v.length - tail.length - 4;
+  const d1 = Math.max(1, Math.round(room * 0.42)), d2 = Math.max(1, room - d1);
+  return (l + " " + ".".repeat(d1) + " " + v + " " + ".".repeat(d2) + tail).slice(0, POST_W);
+}
+const P = (id, label, value) => ({ id: id, label: label, value: value, text: pl(label, value) });
+
+const STAGES = [
+  {
+    n: 1, year: "1975", tag: "MITS ALTAIR 8800", cn: "阿尔泰 8800",
+    shot: "dolly", mem: 256,
+    ph: [255, 152, 42], accents: [[255, 48, 24], [120, 120, 120]],
+    az: 0.62, elev: 13, spin: 1.00, margin: 1.06,
+    build: buildAltair,
+    post: [
+      { raw: "POST 1975-01  MITS ALTAIR 8800 .................... COLD START" },
+      P("CPU", "CPU", "INTEL 8080 @ 2.000 MHZ"),
+      P("MEM", "MEMORY", "000256 BYTES"),
+      P("WORDSIZE", "WORDSIZE", "8 BIT"),
+      P("PANEL", "FRONT PANEL", "25 TOGGLE / 36 LED"),
+      P("STORAGE", "STORAGE", "PAPER TAPE READER"),
+      P("SOFTWARE", "SOFTWARE", "ALTAIR BASIC 4K"),
+      P("PRICE", "PRICE", "USD 397 (KIT FORM)")
+    ],
+    cap: ["1975 · MITS ALTAIR 8800 · 阿尔泰 8800",
+          "登上《大众电子》封面的那台「能自己拥有的计算机」，让「个人」二字第一次有了硬件的形状。"],
+    note: "KIT USD 397"
+  },
+  {
+    n: 2, year: "1977", tag: "APPLE ][", cn: "苹果二号",
+    shot: "hero", mem: 49152,
+    ph: [86, 255, 132], accents: [[86, 255, 140], [40, 40, 46]],
+    az: 0.55, elev: 17, spin: 1.15, margin: 1.06,
+    build: buildApple2,
+    post: [
+      { raw: "POST 1977-04  APPLE ][ ............................. COLD START" },
+      P("CPU", "CPU", "MOS 6502 @ 1.023 MHZ"),
+      P("MEM", "MEMORY", "0004 KB -> 0048 KB"),
+      P("VIDEO", "VIDEO", "COLOR NTSC 280x192"),
+      P("SLOTS", "EXPANSION", "8 SLOT BUS"),
+      P("STORAGE", "STORAGE", "CASSETTE / DISK ]["),
+      P("SOFTWARE", "SOFTWARE", "APPLE DOS 3.3 + BASIC"),
+      P("PRICE", "PRICE", "USD 1298")
+    ],
+    cap: ["1977 · APPLE ][ · 苹果二号",
+          "彩色图形 + 8 条开放扩展槽：电脑第一次不只是「算得快」，而是「可以被改装」。"],
+    note: "8 SLOT BUS"
+  },
+  {
+    n: 3, year: "1981", tag: "IBM PC 5150", cn: "IBM 个人电脑",
+    shot: "hero", mem: 655360, burst: [7.20, 10.40],
+    ph: [64, 255, 108], accents: [[64, 255, 108], [64, 255, 108]],
+    az: 0.72, elev: 16, spin: 0.90, margin: 1.05,
+    build: buildIBMPC,
+    post: [
+      { raw: "POST 1981-08  IBM PC 5150 .......................... COLD START" },
+      P("CPU", "CPU", "INTEL 8088 @ 4.77 MHZ"),
+      P("MEM", "MEMORY", "000016 KB -> 000256 KB"),
+      P("BUS", "BUS", "8 BIT ISA / OPEN ARCH"),
+      P("STORAGE", "STORAGE", '5.25" FDD 160 KB x2'),
+      P("VIDEO", "VIDEO", "MDA 80x25 MONOCHROME"),
+      P("SOFTWARE", "SOFTWARE", "PC-DOS 1.00"),
+      P("PRICE", "PRICE", "USD 1565")
+    ],
+    cap: ["1981 · IBM PC 5150 · IBM 个人电脑",
+          "开放架构 + 公开的 BIOS 清单，让「兼容机」成为产业：个人电脑的行业标准就此定型。"],
+    note: "OPEN ARCH"
+  },
+  {
+    n: 4, year: "1982", tag: "COMMODORE 64", cn: "康懋达 64",
+    shot: "orbit", mem: 65536,
+    ph: [150, 246, 255], accents: [[80, 215, 255], [74, 99, 232]],
+    az: 0.68, elev: 21, spin: 1.20, margin: 1.05,
+    build: buildC64,
+    post: [
+      { raw: "POST 1982-08  COMMODORE 64 ......................... COLD START" },
+      P("CPU", "CPU", "MOS 6510 @ 1.023 MHZ"),
+      P("MEM", "MEMORY", "000064 KB"),
+      P("VIDEO", "VIDEO", "VIC-II 320x200 / 16 COL"),
+      P("SOUND", "SOUND", "SID 6581 / 3 VOICES"),
+      P("STORAGE", "STORAGE", "DATASSETTE / 1541 FDD"),
+      P("SOFTWARE", "SOFTWARE", "KERNAL + BASIC 2.0"),
+      P("PRICE", "PRICE", "USD 595")
+    ],
+    cap: ["1982 · COMMODORE 64 · 康懋达 64",
+          "史上最畅销的单一电脑型号（约 1700 万台）：电脑从工具变成家电，从办公室走进客厅。"],
+    note: "17,000,000 UNITS"
+  },
+  {
+    n: 5, year: "1986", tag: "COMPAQ DESKPRO 386", cn: "康柏 Deskpro 386",
+    shot: "hero", mem: 4194304,
+    ph: [255, 176, 64], accents: [[255, 72, 48], [186, 222, 255]],
+    az: 0.66, elev: 15, spin: 0.95, margin: 1.05,
+    build: buildDeskpro,
+    post: [
+      { raw: "POST 1986-09  COMPAQ DESKPRO 386 ................... COLD START" },
+      P("CPU", "CPU", "INTEL 80386DX @ 16.000 MHZ"),
+      P("MEM", "MEMORY", "0001024 KB -> 0004096 KB"),
+      P("BUS", "BUS", "32 BIT MEMORY / 16 BIT ISA"),
+      P("STORAGE", "STORAGE", '1.2 MB FDD + 40 MB HDD'),
+      P("VIDEO", "VIDEO", "VGA 640x480 / 16 COLOR"),
+      P("SOFTWARE", "SOFTWARE", "MS-DOS 3.2 / WINDOWS 1.0"),
+      P("PRICE", "PRICE", "USD 6499")
+    ],
+    cap: ["1986 · COMPAQ DESKPRO 386 · 康柏 Deskpro 386",
+          "第一台用第三方 CPU 打进 IBM 地盘的机器：32 位寻址把「640KB 够用」这句话彻底作废。"],
+    note: "FIRST 32-BIT PC"
+  },
+  {
+    n: 6, year: "1995", tag: "WINDOWS 95 PC", cn: "Windows 95 兼容机",
+    shot: "hero", mem: 16777216,
+    ph: [96, 232, 200], accents: [[255, 178, 50], [64, 255, 120], [96, 232, 200]],
+    az: 0.70, elev: 17, spin: 0.90, margin: 1.05,
+    build: buildWin95,
+    post: [
+      { raw: "POST 1995-08  WINDOWS 95 PC ...................... COLD START" },
+      P("CPU", "CPU", "INTEL PENTIUM @ 133 MHZ"),
+      P("MEM", "MEMORY", "00016384 KB EDO DRAM"),
+      P("BUS", "BUS", "PCI 2.1 / PLUG AND PLAY"),
+      P("STORAGE", "STORAGE", '1.6 GB HDD + 4x CD-ROM'),
+      P("VIDEO", "VIDEO", "SVGA 1024x768 / 256 COLOR"),
+      P("SOUND", "SOUND", "SOUND BLASTER 16"),
+      P("SOFTWARE", "SOFTWARE", "WINDOWS 95 OSR2"),
+      P("PRICE", "PRICE", "USD 2199")
+    ],
+    cap: ["1995 · WINDOWS 95 PC · Windows 95 兼容机",
+          "「开始」按钮 + 即插即用：图形界面把电脑从专业设备变成每个家庭都会用的家电。"],
+    note: "PLUG AND PLAY"
+  },
+  {
+    n: 7, year: "1998", tag: "IMAC G3", cn: "iMac G3",
+    shot: "crane", mem: 33554432,
+    ph: [122, 224, 255], accents: [[134, 232, 255], [232, 247, 252]],
+    az: 0.60, elev: 14, spin: 1.00, margin: 1.06,
+    build: buildiMac,
+    post: [
+      { raw: "POST 1998-08  IMAC G3 ............................ COLD START" },
+      P("CPU", "CPU", "POWERPC 750 G3 @ 233 MHZ"),
+      P("MEM", "MEMORY", "00032768 KB SDRAM"),
+      P("STORAGE", "STORAGE", "4 GB EIDE HARD DISK"),
+      P("VIDEO", "VIDEO", '15" CRT 1024x768 / MILLIONS'),
+      P("NET", "NETWORK", "10/100 BASE-T ETHERNET"),
+      P("PORT", "PORTS", "2x USB / NO FLOPPY / NO SCSI"),
+      P("SOFTWARE", "SOFTWARE", "MAC OS 8.1"),
+      P("PRICE", "PRICE", "USD 1299")
+    ],
+    cap: ["1998 · IMAC G3 · iMac G3",
+          "把主机塞进显示器、砍掉软驱、只留 USB：电脑第一次被当作「设计品」来卖，而不是当作设备。"],
+    note: "NO FLOPPY / USB ONLY"
+  },
+  {
+    n: 8, year: "2003", tag: "IBM THINKPAD T40", cn: "ThinkPad T40",
+    shot: "hero", mem: 268435456,
+    ph: [206, 212, 222], accents: [[126, 174, 220], [216, 48, 44]],
+    az: 0.66, elev: 24, spin: 0.85, margin: 1.06,
+    build: buildThinkPad,
+    post: [
+      { raw: "POST 2003-04  IBM THINKPAD T40 ................... COLD START" },
+      P("CPU", "CPU", "INTEL PENTIUM M @ 1.50 GHZ"),
+      P("MEM", "MEMORY", "0000512 KB DDR SDRAM"),
+      P("STORAGE", "STORAGE", "40 GB 4200 RPM HDD"),
+      P("VIDEO", "VIDEO", '14.1" TFT 1024x768'),
+      P("INPUT", "INPUT", "TRACKPOINT + TOUCHPAD"),
+      P("WEIGHT", "WEIGHT", "2.25 KG"),
+      P("SOFTWARE", "SOFTWARE", "WINDOWS XP PROFESSIONAL"),
+      P("PRICE", "PRICE", "USD 1699")
+    ],
+    cap: ["2003 · IBM THINKPAD T40 · ThinkPad T40",
+          "全黑、方正、键盘正中一颗红点：这套设计语言定了商务本二十年，也是无数人办公室里的第一台「自己的电脑」。"],
+    note: "THE BLACK BOX"
+  },
+  {
+    n: 9, year: "2007", tag: "ASUS EEE PC 701", cn: "华硕易 PC",
+    shot: "hero", mem: 536870912,
+    ph: [236, 232, 222], accents: [[178, 218, 250], [206, 202, 194]],
+    az: 0.62, elev: 22, spin: 0.92, margin: 1.06,
+    build: buildEeePC,
+    post: [
+      { raw: "POST 2007-10  ASUS EEE PC 701 ................... COLD START" },
+      P("CPU", "CPU", "INTEL CELERON M @ 900 MHZ"),
+      P("MEM", "MEMORY", "0000512 KB DDR2"),
+      P("STORAGE", "STORAGE", "4 GB SSD (NO MOVING PARTS)"),
+      P("VIDEO", "VIDEO", '7" 800x480 / VGA OUT'),
+      P("NET", "NETWORK", "WIFI 802.11G / 10-100 LAN"),
+      P("WEIGHT", "WEIGHT", "0.92 KG"),
+      P("SOFTWARE", "SOFTWARE", "XANDROS LINUX"),
+      P("PRICE", "PRICE", "USD 299")
+    ],
+    cap: ["2007 · ASUS EEE PC 701 · 华硕易 PC",
+          "299 美元的 7 英寸小本：能上网、能打字、能塞进包里。上网本三年卖了一亿多台，然后被平板电脑一夜抹平。"],
+    note: "USD 299 / 7-INCH"
+  },
+  {
+    n: 10, year: "2010", tag: "IPAD", cn: "iPad",
+    shot: "hero", mem: 268435456,
+    ph: [236, 240, 248], accents: [[164, 218, 255], [214, 219, 224]],
+    az: 0.60, elev: 15, spin: 1.05, margin: 1.07,
+    build: buildiPad,
+    post: [
+      { raw: "POST 2010-04  IPAD .............................. COLD START" },
+      P("CPU", "CPU", "APPLE A4 @ 1.000 GHZ"),
+      P("MEM", "MEMORY", "0000256 KB LPDDR"),
+      P("STORAGE", "STORAGE", "16 GB NAND FLASH"),
+      P("VIDEO", "VIDEO", '9.7" IPS 1024x768'),
+      P("INPUT", "INPUT", "MULTI-TOUCH / NO KEYBOARD"),
+      P("BATTERY", "BATTERY", "10 HOURS"),
+      P("OS", "SOFTWARE", "IPHONE OS 3.2"),
+      P("PRICE", "PRICE", "USD 499")
+    ],
+    cap: ["2010 · IPAD · iPad",
+          "没有键盘、没有鼠标、没有文件系统：对绝大多数人来说，「个人电脑」这个词从此不再等于一台台式机。"],
+    note: "POST-PC"
+  },
+  {
+    n: 11, year: "2012", tag: "RASPBERRY PI", cn: "树莓派",
+    shot: "hero", mem: 268435456,
+    ph: [120, 240, 150], accents: [[255, 84, 60], [214, 174, 68]],
+    az: 0.80, elev: 26, spin: 1.05, margin: 1.07,
+    build: buildPi,
+    post: [
+      { raw: "POST 2012-02  RASPBERRY PI ...................... COLD START" },
+      P("CPU", "CPU", "ARM1176JZF-S @ 700 MHZ"),
+      P("MEM", "MEMORY", "0000256 KB SDRAM"),
+      P("STORAGE", "STORAGE", "SD CARD (NO ONBOARD)"),
+      P("VIDEO", "VIDEO", "HDMI 1080P / COMPOSITE"),
+      P("GPIO", "GPIO", "26 PIN HEADER / I2C / SPI"),
+      P("POWER", "POWER", "5V MICRO-USB / 3.5 W"),
+      P("OS", "SOFTWARE", "RASPBIAN (LINUX)"),
+      P("PRICE", "PRICE", "USD 35")
+    ],
+    cap: ["2012 · RASPBERRY PI · 树莓派",
+          "35 美元的裸板电脑：整机只有信用卡大小，却把「可编程的机器」重新发给了全世界的教室。"],
+    note: "USD 35 / CREDIT-CARD SIZE"
+  },
+  {
+    n: 12, year: "2016", tag: "GAMING LAPTOP", cn: "游戏本",
+    shot: "orbit", mem: 17179869184,
+    ph: [214, 120, 255], accents: [[255, 74, 114], [84, 230, 255], [134, 220, 255]],
+    az: 0.62, elev: 24, spin: 0.85, margin: 1.06,
+    build: buildGaming,
+    post: [
+      { raw: "POST 2016-08  GAMING LAPTOP ..................... COLD START" },
+      P("CPU", "CPU", "INTEL CORE I7-6700HQ"),
+      P("GPU", "GRAPHICS", "NVIDIA GTX 1060 / 6 GB"),
+      P("MEM", "MEMORY", "00016384 KB DDR4"),
+      P("STORAGE", "STORAGE", "256 GB SSD + 1 TB HDD"),
+      P("VIDEO", "VIDEO", '15.6" 1920x1080 / 120 HZ'),
+      P("COOLING", "COOLING", "DUAL FAN / 4 HEATPIPE"),
+      P("WEIGHT", "WEIGHT", "2.60 KG"),
+      P("PRICE", "PRICE", "USD 1499")
+    ],
+    cap: ["2016 · GAMING LAPTOP · 游戏本",
+          "同一条路线在这里分岔：一边越做越薄，一边越做越厚 —— 双风扇、侧出风、RGB 键列，把台式机的性能塞进背包。"],
+    note: "DUAL FAN / 120 HZ"
+  },
+  {
+    n: 13, year: "2020", tag: "MAC MINI M1", cn: "Mac mini M1",
+    shot: "crane", mem: 8589934592,
+    ph: [200, 224, 255], accents: [[160, 200, 240], [242, 246, 255]],
+    az: 0.66, elev: 26, spin: 0.80, margin: 1.05,
+    build: buildMacMini,
+    post: [
+      { raw: "POST 2020-11  MAC MINI M1 ....................... COLD START" },
+      P("CPU", "CPU", "APPLE M1 8-CORE @ 3.2 GHZ"),
+      P("GPU", "GRAPHICS", "8-CORE INTEGRATED"),
+      P("MEM", "MEMORY", "0008192 KB UNIFIED"),
+      P("STORAGE", "STORAGE", "256 GB NVMe SSD"),
+      P("NPU", "NEURAL", "16-CORE / 11 TOPS"),
+      P("POWER", "POWER", "39 W MAX"),
+      P("WEIGHT", "WEIGHT", "1.20 KG"),
+      P("PRICE", "PRICE", "USD 699")
+    ],
+    cap: ["2020 · MAC MINI M1 · Mac mini M1",
+          "CPU、GPU、内存、神经引擎焊进同一块芯片：主板消失了，整台电脑缩成 19.7 厘米见方、3.6 厘米高的铝盒子。"],
+    note: "SoC / 3.6 CM TALL"
+  },
+  {
+    n: 14, year: "2026", tag: "AI PC", cn: "AI 个人电脑",
+    shot: "dolly", mem: 68719476736,
+    ph: [220, 140, 255], accents: [[85, 226, 255], [192, 108, 255]],
+    az: 0.62, elev: 26, spin: 0.85, margin: 1.06,
+    build: buildAIPC,
+    post: [
+      { raw: "POST 2026-01  AI PC ............................. COLD START" },
+      P("CPU", "CPU", "24-CORE HYBRID + NPU 45 TOPS"),
+      P("MEM", "MEMORY", "00065536 KB LPDDR5X"),
+      P("STORAGE", "STORAGE", "2 TB PCIE 5.0 NVMe"),
+      P("MODEL", "LOCAL MODEL", "70B PARAMS / 4-BIT"),
+      P("TOPS", "INFERENCE", "120 TOKENS PER SECOND"),
+      P("PRIVACY", "PRIVACY", "ON-DEVICE / NO CLOUD"),
+      P("POWER", "POWER", "18 W TYPICAL"),
+      P("PRICE", "PRICE", "USD 1499")
+    ],
+    cap: ["2026 · AI PC · AI 个人电脑",
+          "模型跑在自己机器上：算力重新回到个人手里，就像 1975 年那台机器把计算从机房搬回来一样。"],
+    note: "LOCAL INFERENCE"
+  }
+];
+STAGES.forEach(s => { s.post.forEach(e => { if (!e.text && e.raw) e.text = e.raw; }); });
+
+const PENDING = [];
+const TOTAL = 14;
+/* 年代轴用：全 14 代按年份铺开 */
+const TIMELINE = STAGES.map(s => s.year).concat(PENDING.map(p => p[1]));
+
+/* 机器在扫描摆动范围内的真实投影尺寸：遍历所有盒子的角点，
+   比「包围盒宽高各自取最大」紧得多，取景才不会把机器缩得太小 */
+function projExtent(s) {
+  const e = s.elev * Math.PI / 180, rng = 0.50 * (s.spin || 1);
+  const se = Math.sin(e), ce = Math.cos(e), P = s.pts;
+  let bw = 0, bh = 0;
+  for (let k = -1.0; k <= 1.001; k += 0.1) {
+    const a = s.az + k * rng, ca = Math.cos(a), sa = Math.sin(a);
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let i = 0; i < P.length; i += 3) {
+      const x = P[i], y = P[i + 1], z = P[i + 2];
+      const px = x * ca - z * sa;                        // 屏幕右轴
+      const py = -x * se * sa + y * ce - z * se * ca;    // 屏幕上轴
+      if (px < x0) x0 = px; if (px > x1) x1 = px;
+      if (py < y0) y0 = py; if (py > y1) y1 = py;
+    }
+    if (x1 - x0 > bw) bw = x1 - x0;
+    if (y1 - y0 > bh) bh = y1 - y0;
+  }
+  return { w: bw, h: bh };
+}
+/* 按机器自身的长宽比决定 3D 画面区的高度（格数），再求相机距离 */
+function frameStage(s) {
+  const ex = projExtent(s);
+  s.AHs = Math.max(18, Math.min(M_ROWS - 4, Math.round(AW * MW / (MH * (ex.w / ex.h)))));
+  s.mY0 = M_Y0 + Math.round((M_ROWS - s.AHs) / 2);
+  const aspect = (AW * MW) / (s.AHs * MH);
+  s.dist = Math.max((ex.h / 2) / TAN_Y, (ex.w / 2) / (TAN_Y * aspect)) * s.margin;
+}
+function fitDist(s, aspect) {
+  const ex = projExtent(s);
+  return Math.max((ex.h / 2) / TAN_Y, (ex.w / 2) / (TAN_Y * aspect)) * s.margin;
+}
+
+STAGES.forEach(s => {
+  BOXES.length = 0; CORNERS.length = 0;
+  s.build(ROOT);
+  const fit = normalize(BOXES, CORNERS);
+  s.R = fit.R; s.Hh = fit.h;
+  s.wx = fit.wx; s.wy = fit.wy; s.wz = fit.wz; s.pts = fit.pts;
+  /* 采样间距双向收敛到固定点数预算（面积 ∝ 1/间距²）。
+     必须双向：树莓派只有 8.5cm 见方，单向「超了才缩」会让它只剩两千多个点，
+     细节全丢、右下角读数也不好看。固定点数 = 每台机器在屏幕上一样细。 */
+  let sp = SPACING, cl = null;
+  for (let k = 0; k < 4; k++) {
+    cl = sampleBoxes(BOXES, sp);
+    const n = cl.px.length;
+    if (n > CLOUD_BUDGET * 0.90 && n < CLOUD_BUDGET * 1.10) break;
+    sp *= Math.sqrt(n / CLOUD_BUDGET);
+  }
+  s.NP = cl.px.length;
+  s.nBoxes = BOXES.length;
+  s.cx3 = new Float32Array(cl.px); s.cy3 = new Float32Array(cl.py); s.cz3 = new Float32Array(cl.pz);
+  s.segs = cl.segs;
+});
+STAGES.forEach(frameStage);
+
+/* ─────────────────────────── 5. 字符图集 ─────────────────────────── */
+let atlas = null;
+function phosColors(rgb, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const k = i / (n - 1), b = 0.34 + 0.66 * k;
+    const wm = Math.max(0, (k - 0.64) / 0.36) * 0.82;
+    let r = rgb[0] * b, g = rgb[1] * b, bl = rgb[2] * b;
+    r = r * (1 - wm) + 255 * wm; g = g * (1 - wm) + 255 * wm; bl = bl * (1 - wm) + 255 * wm;
+    out.push([r | 0, g | 0, bl | 0]);
+  }
+  return out;
+}
+function buildAtlas(stage) {
+  const cols = phosColors(stage.ph, NPHOS);
+  for (let i = 0; i < 8; i++) cols.push(stage.accents[i] ? stage.accents[i].slice() : [255, 255, 255]);
+  const c = document.createElement("canvas");
+  c.width = NRAMP * MW; c.height = cols.length * MH;
+  const g = c.getContext("2d");
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.font = MFSIZE + "px " + FONT;
+  for (let i = 0; i < cols.length; i++) {
+    g.fillStyle = "rgb(" + cols[i][0] + "," + cols[i][1] + "," + cols[i][2] + ")";
+    for (let j = 1; j < NRAMP; j++) g.fillText(RAMP[j], j * MW + MW * .5, i * MH + MH * .5 + 1);
+  }
+  atlas = c;
+}
+
+/* ─────────────────────────── 6. 文本绘制 ─────────────────────────── */
+function drawStr(row, col, str, color, size) {
+  ctx.font = (size || FSIZE) + "px " + FONT;
+  ctx.fillStyle = color;
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  const y = row * CH + CH * 0.76;
+  let x = col * CW;
+  for (const ch of str) {
+    if (x > W) break;
+    if (ch !== " ") ctx.fillText(ch, x, y);
+    x += charCells(ch) * CW;
+  }
+  return x;
+}
+function strCells(str) { let n = 0; for (const ch of str) n += charCells(ch); return n; }
+function cutByCells(str, n) {
+  let c = 0, out = "";
+  for (const ch of str) { const w = charCells(ch); if (c + w > n) break; out += ch; c += w; }
+  return out;
+}
+
+/* ─────────────────────────── 7. 状态机 ─────────────────────────── */
+const S = {
+  stage: 0, st: 0, playing: true, mono: true, sound: true, ended: false,
+  logDone: [], logIdx: 0, logChars: 0, tAcc: 0,
+  capChars: 0, capAcc: 0, flash: 0,
+  prev: -1, morph: 1            // 转场：上一镜索引 / 进度 0→1
+};
+const PRINT_T = 1.9, CPS = 82, LINE_PAUSE = 0.13, CAP_CPS = 34;
+let HOLD = false;   // 调试用：freeze 快进时不自动跳到下一镜
+
+/* ── 世代转场 ──
+   每台机器的点云都被收敛到同一个预算（见 CLOUD_BUDGET 的双向采样），
+   转场时让旧机沿径向炸散、新机从随机球壳收拢，两朵云共用一张深度缓冲，
+   于是「Altair 的拨动开关散成字节，重组成 Apple ][ 的键盘」。 */
+const MORPH_T = 1.15;                 // 转场时长（秒）
+/* 每点 4 个确定性随机数：溶解阈值 / 三个抖动量 */
+const RND = new Float32Array(4 * 110000);
+(function () {
+  let sd = 20260117;
+  for (let i = 0; i < RND.length; i++) {
+    sd = (Math.imul(sd, 1664525) + 1013904223) | 0;
+    RND[i] = (sd >>> 0) / 4294967296 - 0.5;
+  }
+})();
+
+/* ── 录片模式（?render=1）的两块状态 ──
+   RENDER_MODE 下页面不跑 rAF，由外部按固定 fps 调 __renderFrame() 确定性推进；
+   keyClick 不发声，只把每一次键击的「全局动画时间 + 随机参数」记进 CLICKS，
+   最后由 __renderAudio() 用 OfflineAudioContext 原样合成一条音轨。 */
+let RENDER_MODE = false;
+let rAcc = 0;                       // 录片模式下的动画时钟（秒）
+/* 片中有两处闪烁（POST 面板的回车块、结束卡的光标）原来读真实时钟；
+   录片时必须改读动画时钟，否则录出来是随机闪烁而不是 2Hz 呼吸。 */
+const nowMs = () => RENDER_MODE ? rAcc * 1000 : performance.now();
+const CLICKS = [];
+let lastClickAnimT = -1;
+function globalTime() {
+  let t = 0;
+  for (let i = 0; i < S.stage; i++) t += STAGES[i].dur;
+  return t + S.st;
+}
+function recordClick(power) {
+  const t = globalTime();
+  if (t - lastClickAnimT < (1 / 30) * (0.66 + Math.random() * 0.68)) return;
+  lastClickAnimT = t;
+  CLICKS.push([+t.toFixed(4), power === undefined ? 1 : power,
+               0.86 + Math.random() * 0.28,        // j：音高/滤波中心
+               1.0 + Math.random() * 0.5]);        // rate：噪声播放速率
+}
+
+const stageTypingTime = s => s.post.reduce((a, l) => a + l.text.length / CPS + LINE_PAUSE, 0);
+const stageCapTime = s => (strCells(s.cap[0]) + strCells(s.cap[1]) + 6) / CAP_CPS;
+STAGES.forEach(s => { s.dur = PRINT_T + 0.55 + stageTypingTime(s) + 0.35 + stageCapTime(s) + 2.1; });
+
+function resetStage(i, morph) {
+  const wasStage = S.stage;
+  S.prev = (morph !== false && i === wasStage + 1) ? wasStage : -1;
+  S.morph = S.prev >= 0 ? 0 : 1;
+  S.stage = i; S.st = 0; S.ended = false;
+  S.logDone = []; S.logIdx = 0; S.logChars = 0; S.tAcc = 0;
+  S.capChars = 0; S.capAcc = 0;
+  /* 转场时不要整块白闪，否则会把爆散/聚拢全盖住 */
+  S.flash = S.prev >= 0 ? 0.30 : 1;
+  buildAtlas(STAGES[i]);
+  if (S.sound) beep(700, .05, .03);
+}
+function advance(dt) {
+  if (S.ended || !S.playing) return;
+  const s = STAGES[S.stage];
+  S.st += dt;
+  S.flash = Math.max(0, S.flash - dt * 3.4);
+  if (S.morph < 1) {
+    S.morph = Math.min(1, S.morph + dt / MORPH_T);
+    if (S.morph >= 1) S.prev = -1;      // 转场结束，回到单云路径
+  }
+
+  const n = s.post.length;
+  if (S.logIdx < n) {
+    const line = s.post[S.logIdx].text;
+    if (S.logChars < line.length) {
+      S.tAcc += dt;
+      const per = 1 / CPS;
+      while (S.tAcc >= per && S.logChars < line.length) {
+        S.tAcc -= per; S.logChars++;
+        if (S.sound) keyClick(0.9);           // 每打一个字一声键击（内部有速率上限）
+      }
+    } else {
+      S.tAcc += dt;
+      if (S.tAcc >= LINE_PAUSE) { S.tAcc = 0; S.logDone.push(line); S.logIdx++; S.logChars = 0; }
+    }
+  }
+  const capT0 = PRINT_T + 0.55 + stageTypingTime(s) + 0.35;
+  if (S.st > capT0) {
+    const total = strCells(s.cap[0]) + strCells(s.cap[1]) + 6;
+    S.capAcc += dt * CAP_CPS;
+    const prev = S.capChars;
+    S.capChars = Math.min(total, Math.floor(S.capAcc));
+    /* 字幕也是「一个字一个字打出来」的，同样配键击声 */
+    if (S.sound && S.capChars > prev) keyClick(1.0);
+  }
+  if (S.st >= s.dur) {
+    if (S.ended || HOLD) { S.st = s.dur; }
+    else if (S.stage < STAGES.length - 1) resetStage(S.stage + 1);
+    else { S.ended = true; S.st = s.dur; }
+  }
+}
+function goto(i) { if (i >= 0 && i < STAGES.length) resetStage(i); }
+
+/* ─────────────────────────── 8. 点云 → 字符渲染 ───────────────────────────
+   每帧：机型旋转 + 视线基合成一个 3×3 —— 每个点只做 9 次乘加就到了相机空间。
+   背面整段剔除（同一面法线相同），再把点散射进 3×3 超采样深度缓冲。          */
+let frameIdx = 0;
+const SBW = AW * SS, SBH = AH * SS;                 // 超采样缓冲 360 × 135
+const sbZ = new Float32Array(SBW * SBH);            // 深度（1e9 = 空）
+const sbL = new Float32Array(SBW * SBH);            // 亮度
+const sbR = new Float32Array(SBW * SBH);            // 原色 R
+const sbG = new Float32Array(SBW * SBH);
+const sbB = new Float32Array(SBW * SBH);
+const sbA = new Uint8Array(SBW * SBH);              // 强调色 ID（0 = 磷光）
+/* 归约后的每格数据 */
+const Lbuf = new Float32Array(AW * AH);             // 亮度（供 Sobel 用）
+const Cbuf = new Uint8Array(AW * AH);               // 覆盖率 0..SS*SS
+const Zbuf = new Float32Array(AW * AH);             // 最近深度
+const Abuf = new Uint8Array(AW * AH);               // 强调色 ID
+const Rbuf = new Float32Array(AW * AH * 3);         // 原色
+const SPX = [0, 1, 0, 1], SPY = [0, 0, 1, 1];       // splat 2×2 足迹
+
+/* 每帧的相机：视线基 + 投影 + 镜头语法（hero / dolly / crane / macro） */
+function buildCam(s, time) {
+  const AHs = s.AHs;
+
+  const spinIn = Math.max(0, Math.min(1, (time - PRINT_T * .85) / 1.7));
+  /* 扫描式摆动：左右缓慢扫过约 ±26°，始终把正面留在镜头里（不做 360° 转台） */
+  const sweep = (Math.sin(time * 0.30) * 0.34 + Math.sin(time * 0.13) * 0.14) * spinIn * (s.spin || 1) * (s.shot === "orbit" ? 1.85 : 1);
+  const tilt = Math.sin(time * 0.42) * 0.02;
+
+  /* ── 镜头语法：14 个镜头不再共用同一台摄影机 ── */
+  let distMul = 1, elevAdd = 0, azAdd = 0, yOff = 0;
+  const u = Math.max(0, Math.min(1, time / s.dur));
+  const sm = u * u * (3 - 2 * u);
+  if (s.shot === "dolly") distMul = 1.26 - 0.50 * sm;                       // 由远推近
+  else if (s.shot === "crane") {                                            // 高角度俯冲落到平视
+    elevAdd = 32 * (1 - Math.min(1, sm / 0.62));
+    azAdd = -0.12 * (1 - sm);
+  } else if (s.shot === "macro") {                                          // 局部缓移
+    distMul = 0.72;
+    azAdd = 0.10 * Math.sin(time * 0.5);
+    yOff = (sm - 0.45) * s.R * 0.42;
+  }
+  const bobY = Math.sin(time * 0.62) * (s.R * 0.012) - yOff;
+
+  /* 视线基（与 projExtent 同一套约定：right/up/fwd） */
+  const e = (s.elev + elevAdd) * Math.PI / 180, az = s.az + azAdd, dist = s.dist * distMul;
+  const ca = Math.cos(az), sa = Math.sin(az), ce = Math.cos(e), se = Math.sin(e);
+  const rx = ca, ry = 0, rz = -sa;                  // right
+  const ux = -se * sa, uy = ce, uz = -se * ca;      // up
+  const fx = -ce * sa, fy = -se, fz = -ce * ca;     // fwd（指向原点）
+  /* 机型旋转 R = Ry(sweep)·Rx(tilt)，行主序 */
+  const sy = Math.sin(sweep), cy = Math.cos(sweep);
+  const tx = Math.sin(tilt), cx = Math.cos(tilt);
+  const R = [cy, sy * tx, sy * cx, 0, cx, -tx, -sy, cy * tx, cy * cx];
+  /* A = V·R（V 的三行是 right/up/fwd） */
+  const a00 = rx * R[0] + ry * R[3] + rz * R[6], a01 = rx * R[1] + ry * R[4] + rz * R[7], a02 = rx * R[2] + ry * R[5] + rz * R[8];
+  const a10 = ux * R[0] + uy * R[3] + uz * R[6], a11 = ux * R[1] + uy * R[4] + uz * R[7], a12 = ux * R[2] + uy * R[5] + uz * R[8];
+  const a20 = fx * R[0] + fy * R[3] + fz * R[6], a21 = fx * R[1] + fy * R[4] + fz * R[7], a22 = fx * R[2] + fy * R[5] + fz * R[8];
+  /* 平移：eye 在 fwd 的反方向 dist 处，bob 只改 y */
+  const T0 = 0, T1 = uy * bobY, T2 = dist - fy * bobY;
+
+  const aspect = (AW * MW) / (AHs * MH);
+  const FY = (AHs / 2) / TAN_Y, FX = (AW / 2) / (TAN_Y * aspect);
+  const CX0 = AW / 2, CY0 = AHs / 2;
+  const near = 1e-3;
+  const flat = !S.mono;
+  const bw = AW * SS, bh = AHs * SS;
+  return { AHs, bw, bh, bn: bw * bh, FX, FY, CX0, CY0, near, flat,
+           a00, a01, a02, a10, a11, a12, a20, a21, a22, T0, T1, T2 };
+}
+
+/* 一朵点云散射进超采样深度缓冲。
+   morphAmp>0 时按「爆散(radial) / 聚拢」偏移位置；alpha<1 时按每点随机值丢弃，做出溶解。 */
+function splatCloud(px, py, pz, segs, cam, alpha, morphAmp, radial) {
+  const rad = radial === true;
+  const a00 = cam.a00, a01 = cam.a01, a02 = cam.a02;
+  const a10 = cam.a10, a11 = cam.a11, a12 = cam.a12;
+  const a20 = cam.a20, a21 = cam.a21, a22 = cam.a22;
+  const T0 = cam.T0, T1 = cam.T1, T2 = cam.T2;
+  const FX = cam.FX, FY = cam.FY, CX0 = cam.CX0, CY0 = cam.CY0;
+  const bw = cam.bw, bh = cam.bh, near = cam.near, flat = cam.flat;
+  for (let si = 0; si < segs.length; si++) {
+    const sg = segs[si], n = sg.n;
+    const nvx = a00 * n[0] + a01 * n[1] + a02 * n[2];
+    const nvy = a10 * n[0] + a11 * n[1] + a12 * n[2];
+    const nvz = a20 * n[0] + a21 * n[1] + a22 * n[2];
+    /* 背面剔除：面法线在相机空间的 +z 分量决定它朝向还是背向镜头 */
+    if (nvz > 0.02) continue;
+    /* 相机空间光照：key + ambient + rim，再乘材质反照率
+       （反照率是关键 —— 否则同朝向的近黑凹槽与白色开关亮度完全一样） */
+    const lam = nvx * KX + nvy * KY + nvz * KZ;
+    const az2 = nvz < 0 ? -nvz : nvz;
+    const rim = Math.pow(1 - (az2 > 1 ? 1 : az2), RIM_POW);
+    let lum = sg.alb * (AMBIENT + KEY_GAIN * (lam > 0 ? lam : 0) + RIM_GAIN * rim);
+    if (lum > 1) lum = 1;
+    const cr = flat ? sg.r : 1, cg = flat ? sg.g : 1, cb = flat ? sg.b : 1;
+    const acc = sg.acc;
+    for (let i = sg.s; i < sg.e; i++) {
+      /* 溶解：按每点随机值丢弃，alpha 越小剩得越少 */
+      if (alpha < 1 && RND[4 * i] + 0.5 > alpha) continue;
+      let x = px[i], y = py[i], z = pz[i];
+      if (morphAmp > 0) {
+        if (rad) {
+          /* 爆散：沿径向飞出去，再叠一点随机抖动，才不会像同心球壳 */
+          const dl = Math.sqrt(x * x + y * y + z * z) || 1e-6;
+          const k = morphAmp * 0.85 / dl;
+          x += x * k + RND[4 * i + 1] * morphAmp;
+          y += y * k + RND[4 * i + 2] * morphAmp;
+          z += z * k + RND[4 * i + 3] * morphAmp;
+        } else {
+          /* 聚拢：从一个随机球壳收缩回目标位置 */
+          x += RND[4 * i + 1] * morphAmp * 0.85;
+          y -= morphAmp * (0.55 + (RND[4 * i + 2] + 0.5) * 0.95);
+          z += RND[4 * i + 3] * morphAmp * 0.55;
+        }
+      }
+      const qz = a20 * x + a21 * y + a22 * z + T2;
+      if (qz < near) continue;
+      const inv = 1 / qz;
+      const sx = (a00 * x + a01 * y + a02 * z + T0) * inv * FX + CX0;
+      const sy2 = CY0 - (a10 * x + a11 * y + a12 * z + T1) * inv * FY;
+      const bx = sx * SS | 0, by = sy2 * SS | 0;
+      for (let k = 0; k < 4; k++) {
+        const ix = bx + SPX[k], iy = by + SPY[k];
+        if (ix < 0 || ix >= bw || iy < 0 || iy >= bh) continue;
+        const o = iy * bw + ix;
+        if (qz < sbZ[o]) {
+          sbZ[o] = qz; sbL[o] = lum;
+          if (flat) { sbR[o] = cr; sbG[o] = cg; sbB[o] = cb; }
+          sbA[o] = acc;
+        }
+      }
+    }
+  }
+}
+
+/* 归约：3×3 子像素 → 一个字符格 */
+function reduceToGrid(AHs, bw, flat) {
+  for (let cy2 = 0; cy2 < AHs; cy2++) {
+    for (let cx2 = 0; cx2 < AW; cx2++) {
+      let cov = 0, lsum = 0, zmin = 1e9, acc = 0, r3 = 0, g3 = 0, b3 = 0;
+      for (let j = 0; j < SS; j++) {
+        const row = (cy2 * SS + j) * bw;
+        for (let i = 0; i < SS; i++) {
+          const o = row + cx2 * SS + i;
+          const z = sbZ[o];
+          if (z >= 1e9) continue;
+          cov++; lsum += sbL[o];
+          if (z < zmin) { zmin = z; acc = sbA[o]; }
+          if (flat) { r3 += sbR[o]; g3 += sbG[o]; b3 += sbB[o]; }
+        }
+      }
+      const c2 = cy2 * AW + cx2;
+      Cbuf[c2] = cov;
+      Zbuf[c2] = zmin;
+      Abuf[c2] = acc;
+      if (cov) {
+        Lbuf[c2] = lsum / cov;
+        if (flat) { Rbuf[c2 * 3] = r3 / cov; Rbuf[c2 * 3 + 1] = g3 / cov; Rbuf[c2 * 3 + 2] = b3 / cov; }
+      } else Lbuf[c2] = 0;
+    }
+  }
+  /* 深度提示：越远越暗，让机器有前后层次（照 engine/three.py 的 depth_cue） */
+  let z0 = 1e9, z1 = -1e9;
+  for (let i = 0; i < AHs * AW; i++) { const z = Zbuf[i]; if (z < 1e9) { if (z < z0) z0 = z; if (z > z1) z1 = z; } }
+  if (z1 - z0 > 1e-6) {
+    const k = 0.16 / (z1 - z0);
+    for (let i = 0; i < AHs * AW; i++) {
+      const z = Zbuf[i];
+      Lbuf[i] *= 1 - (z < 1e9 ? (z - z0) * k : 0);
+    }
+  }
+}
+
+/* 每帧：一台相机 + 一到两朵云（转场时旧机爆散、新机聚拢，共用同一张深度缓冲） */
+function renderMachine(s, time) {
+  const cam = buildCam(s, time);
+  sbZ.fill(1e9, 0, cam.bn);
+  const mp = S.prev >= 0 ? Math.min(1, S.morph) : 1;
+  if (mp < 1) {
+    const pv = STAGES[S.prev];
+    const a = Math.min(1, mp / 0.52);                  // 旧机爆散
+    const b = Math.max(0, (mp - 0.40) / 0.60);         // 新机聚拢
+    if (a < 1) {
+      const ea = 1 - (1 - a) * (1 - a);
+      splatCloud(pv.cx3, pv.cy3, pv.cz3, pv.segs, cam, 1 - a * a, pv.R * 1.9 * ea, false);
+    }
+    if (b > 0) {
+      splatCloud(s.cx3, s.cy3, s.cz3, s.segs, cam, Math.min(1, 0.35 + b * 1.5), s.R * 1.9 * (1 - Math.pow(1 - b, 3)), false);
+    }
+  } else {
+    /* 插入镜「剖面」：点云沿径向炸开再合拢。IBM PC 5150 的历史意义就是开放架构，
+       把机器拆开给观众看，正好和这一镜的主题对上。 */
+    if (s.burst && time > s.burst[0] && time < s.burst[1]) {
+      const u = (time - s.burst[0]) / (s.burst[1] - s.burst[0]);
+      const amp = s.R * 2.0 * Math.sin(Math.PI * u);
+      splatCloud(s.cx3, s.cy3, s.cz3, s.segs, cam, 1, amp, true);
+    } else {
+      splatCloud(s.cx3, s.cy3, s.cz3, s.segs, cam, 1, 0, false);
+    }
+  }
+  reduceToGrid(cam.AHs, cam.bw, cam.flat);
+}
+
+/* 主绘制 */
+function draw() {
+  const s = STAGES[S.stage];
+  const phR = s.ph[0], phG = s.ph[1], phB = s.ph[2];
+  const ph = "rgb(" + phR + "," + phG + "," + phB + ")";
+  const phD = "rgba(" + phR + "," + phG + "," + phB + ",";
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+
+  if (S.ended) { drawEndCard(); return; }
+
+  renderMachine(s, S.st);
+  const L = Lbuf;
+  /* 转场过程中不要跑「自上而下打印」的扫描线和字符分级，
+     否则爆散/聚拢会被裁掉一半、只显示低密度字符 */
+  const morphing = S.prev >= 0 && S.morph < 1;
+  const reveal = morphing ? 1 : Math.min(1, Math.max(0, (S.st - 0.12) / PRINT_T));
+  const frontRow = reveal * (s.AHs + 6) - 4;
+  const dens = morphing ? 1 : Math.min(1, Math.max(0, (S.st - 0.75) / 1.25));
+  const giMax = Math.max(3, Math.round(3 + dens * (NRAMP - 4)));
+
+  /* 3D 区背景光晕 */
+  const gcx = M_X0 + AW * MW * .5, gcy = (M_Y0 + M_ROWS * .55) * CH;
+  const grd = ctx.createRadialGradient(gcx, gcy, 10, gcx, gcy, AW * MW * .64);
+  grd.addColorStop(0, phD + "0.10)");
+  grd.addColorStop(.55, phD + "0.030)");
+  grd.addColorStop(1, phD + "0)");
+  ctx.fillStyle = grd; ctx.fillRect(0, M_Y0 * CH, W, M_ROWS * CH);
+
+  ctx.imageSmoothingEnabled = false;
+  const fadeMul = Math.min(1, Math.max(0, (S.st - 0.05) / 0.9));
+
+  for (let y = 0; y < s.AHs; y++) {
+    if (y > frontRow) break;
+    const inBand = (frontRow - y) < 2.4;
+    const py = (s.mY0 * CH) + y * MH;
+    const rowOff = y * AW;
+    for (let x = 0; x < AW; x++) {
+      const i = rowOff + x;
+      const cov = Cbuf[i];
+      if (cov === 0) continue;                      // 没被任何点命中 = 空
+      const lum = L[i];
+
+      /* Sobel：空白邻居用自身亮度填，外轮廓因此不会产生假边
+         （外轮廓交给下面的覆盖率剪影，那才是点云白送的东西） */
+      let edge = 0;
+      if (x > 0 && x < AW - 1 && y > 0 && y < s.AHs - 1) {
+        const a = Cbuf[i - AW - 1] ? L[i - AW - 1] : lum, b = Cbuf[i - AW] ? L[i - AW] : lum, c2 = Cbuf[i - AW + 1] ? L[i - AW + 1] : lum;
+        const d = Cbuf[i - 1] ? L[i - 1] : lum, f = Cbuf[i + 1] ? L[i + 1] : lum;
+        const g2 = Cbuf[i + AW - 1] ? L[i + AW - 1] : lum, h2 = Cbuf[i + AW] ? L[i + AW] : lum, k2 = Cbuf[i + AW + 1] ? L[i + AW + 1] : lum;
+        const ex = (c2 + 2 * f + k2) - (a + 2 * d + g2);
+        const ey = (g2 + 2 * h2 + k2) - (a + 2 * b + c2);
+        edge = Math.max(0, Math.hypot(ex, ey) - 1.20) * 0.54;
+        if (edge > 1) edge = 1;
+      }
+      /* 剪影描边：覆盖率由满转空的那一圈 —— 直接来自点云，不用猜 */
+      let sil = 0;
+      if (cov >= 2 && (Cbuf[i - 1] === 0 || Cbuf[i + 1] === 0 ||
+          (y > 0 && Cbuf[i - AW] === 0) || (y < s.AHs - 1 && Cbuf[i + AW] === 0))) sil = 1;
+      /* 覆盖率不足的格子是抗锯齿边缘，按比例柔化 */
+      const soft = Math.min(1, cov / (SS * SS * 0.55));
+
+      let base = (lum - 0.035) / 0.62;
+      if (base > 1) base = 1; else if (base < 0) base = 0;
+      base = Math.pow(base, 0.82);
+      let v = base * 0.68 + edge * 0.50 + sil * 0.34;
+      v *= 0.35 + 0.65 * soft;
+      if (inBand) v = Math.min(1, v + 0.30);
+      if (v > 1) v = 1;
+      if (v < 0.055) continue;
+
+      const id = Abuf[i];
+      /* v→字符用 gamma 提亮（细字符在暗底上观感偏暗），v→颜色保持线性 */
+      const gv = Math.pow(v, 0.75);
+      let gi, ci;
+      if (id > 0) {
+        ci = NPHOS + Math.min(7, id - 1);
+        gi = Math.max(4, Math.round(gv * (NRAMP - 1)));
+      } else {
+        gi = Math.round(gv * (NRAMP - 1));
+        /* 颜色档与亮度解耦：暗格也给一个可见的磷光色，而不是黑 */
+        ci = Math.min(NPHOS - 1, Math.round((0.34 + 0.66 * v) * (NPHOS - 1)));
+      }
+      if (gi > giMax) gi = giMax;
+      if (gi <= 0) continue;
+
+      const dx = M_X0 + x * MW, dy = py;
+      if (S.mono) {
+        ctx.drawImage(atlas, gi * MW, ci * MH, MW, MH, dx, dy, MW, MH);
+      } else {
+        let r, g, b;
+        if (id > 0 && s.accents[id - 1]) { const A = s.accents[id - 1]; r = A[0]; g = A[1]; b = A[2]; }
+        else { r = Rbuf[i * 3] * 255; g = Rbuf[i * 3 + 1] * 255; b = Rbuf[i * 3 + 2] * 255; }
+        if (r + g + b < 8) { r = phR; g = phG; b = phB; }
+        const kk = 0.40 + 0.60 * v;
+        ctx.fillStyle = "rgb(" + (r * kk | 0) + "," + (g * kk | 0) + "," + (b * kk | 0) + ")";
+        ctx.font = MFSIZE + "px " + FONT;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(RAMP[gi], dx + MW * .5, dy + MH * .5 + 1);
+      }
+    }
+  }
+
+  /* 打印前沿亮线 */
+  if (frontRow < s.AHs && reveal < 1 && frontRow > -1) {
+    const fy = s.mY0 * CH + Math.max(0, Math.floor(frontRow)) * MH;
+    const lg = ctx.createLinearGradient(0, fy - MH, 0, fy + MH);
+    lg.addColorStop(0, phD + "0)"); lg.addColorStop(.5, phD + "0.5)"); lg.addColorStop(1, phD + "0)");
+    ctx.fillStyle = lg; ctx.fillRect(0, fy - MH, W, MH * 2);
+  }
+  /* 整体淡入 */
+  if (fadeMul < 1) { ctx.fillStyle = "rgba(0,0,0," + (1 - fadeMul) + ")"; ctx.fillRect(0, M_Y0 * CH, W, M_ROWS * CH); }
+  /* 换镜闪白 */
+  if (S.flash > 0.01) { ctx.fillStyle = "rgba(255,255,255," + (S.flash * 0.18) + ")"; ctx.fillRect(0, M_Y0 * CH, W, M_ROWS * CH); }
+
+  drawHeader(s);
+  drawLog(s);
+  drawGauge(s);
+  drawTimeline(s);
+  drawCaption(s);
+  drawFooter(s);
+
+  /* CRT 上电：一条亮线从屏幕中线炸开成整屏（只在片头 0.8s） */
+  if (S.stage === 0 && S.st < 0.80) {
+    const p = S.st / 0.80;
+    const hh = H * (1 - Math.pow(1 - p, 3));
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H / 2 - hh / 2);
+    ctx.fillRect(0, H / 2 + hh / 2, W, H - (H / 2 + hh / 2));
+    const bl = (1 - p) * (1 - p);
+    ctx.fillStyle = "rgba(226,255,238," + (bl * 0.95) + ")";
+    ctx.fillRect(0, H / 2 - hh / 2 - 2, W, 3);
+    ctx.fillRect(0, H / 2 + hh / 2 - 1, W, 3);
+    if (p < 0.22) { ctx.fillStyle = "rgba(210,255,226," + (0.22 - p) * 2.4 + ")"; ctx.fillRect(0, 0, W, H); }
+  }
+
+  if (PREVIEW) previewPass(s);
+}
+
+/* 顶栏 */
+/* ── 指数增长仪表 ──
+   50 年内存从 256 字节涨到 64GB，是 10^8 倍。线性轴上那根柱子永远是 0，
+   所以只能画对数轴 —— 在 log10 刻度上它是一条几乎笔直的斜线，这才看得出「一直在涨」。 */
+const MEM_LO = 2.0, MEM_HI = 11.0;        // log10 范围：100 B → 100 GB
+/* 内存一律用二进制单位（2^10/2^20/2^30）—— 这是硬件史里的通用口径，
+   M1 Mac mini 写 8 GB 就是 8 GB；用 10^9 除会显示成 9 GB，和 POST 面板对不上。 */
+function fmtMem(b) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(0) + " GB";
+  if (b >= 1048576) return (b / 1048576).toFixed(0) + " MB";
+  if (b >= 1024) return (b / 1024).toFixed(0) + " KB";
+  return b + " B";
+}
+function drawGauge(s) {
+  const phR = s.ph[0], phG = s.ph[1], phB = s.ph[2];
+  const phD = "rgba(" + phR + "," + phG + "," + phB + ",";
+  const col = 97, mb = s.mem || 256;
+  const lg = Math.log10(mb);
+  const t = Math.max(0, Math.min(1, (lg - MEM_LO) / (MEM_HI - MEM_LO)));
+  const N = 38, filled = Math.round(t * N);
+  let bar = "";
+  for (let i = 0; i < N; i++) bar += i < filled ? "█" : "·";
+  drawStr(5, col, "◈ MEMORY · LOG SCALE · SPAN 10^8", phD + ".62)", 15);
+  drawStr(6, col, bar, phD + ".90)", 17);
+  drawStr(7, col, fmtMem(mb) + "  ·  log10 = " + lg.toFixed(2), phD + ".52)", 14);
+}
+
+/* 顶栏：标题 + 进度条 */
+function drawHeader(s) {
+  const pct = Math.round(((s.n - 1) + Math.min(1, S.st / s.dur)) / TOTAL * 100);
+  const barW = 18, fillN = Math.round(pct / 100 * barW);
+  const bar = "[" + "█".repeat(fillN) + "░".repeat(barW - fillN) + "]" + String(pct).padStart(4, " ") + "%";
+  const left = " PC-HISTORY POST ";
+  const mid = " STAGE " + String(s.n).padStart(2, "0") + "/" + TOTAL + " · " + s.year + " ";
+  const gap = Math.max(2, COLS - (3 + strCells(left) + strCells(mid) + strCells(bar) + 1));
+  const g1 = Math.floor(gap * 0.55), g2 = gap - g1;
+  drawStr(R_HEADER, 0, "╔══" + left + "═".repeat(g1) + mid + "═".repeat(g2) + bar + "╗",
+    "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",.75)");
+}
+
+/* 左上角 POST 日志面板（HUD，压在 3D 之上） */
+function drawLog(s) {
+  const typing = S.logIdx < s.post.length;
+  const x0 = (LOG_COL - 1) * CW, y0 = (R_LOG0 - 1) * CH + 6;
+  const w0 = LOG_W * CW + CW, h0 = LOG_ROWS * CH + 18;
+  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
+
+  ctx.fillStyle = "rgba(0,0,0,.87)"; ctx.fillRect(x0, y0, w0, h0);
+  ctx.strokeStyle = phC + ".26)"; ctx.lineWidth = 1; ctx.strokeRect(x0 + .5, y0 + .5, w0 - 1, h0 - 1);
+
+  const keep = LOG_ROWS - (typing ? 1 : 0);
+  const lines = S.logDone.slice(Math.max(0, S.logDone.length - keep));
+  const typingLine = typing ? s.post[S.logIdx].text.slice(0, S.logChars) : null;
+  for (let i = 0; i < lines.length; i++)
+    drawStr(R_LOG0 + i, LOG_COL, lines[i], phC + ".66)");
+  if (typingLine !== null) {
+    const r = R_LOG0 + lines.length;
+    drawStr(r, LOG_COL, typingLine, "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")");
+    if (Math.floor(nowMs() / 250) % 2 === 0)
+      drawStr(r, LOG_COL + strCells(typingLine), "█", "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")");
+  }
+}
+
+/* 底部年代轴：12 代全列出来，当前一代高亮（终端风格的"进度条"） */
+const R_TIME = 41;
+function drawTimeline(s) {
+  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
+  const bright = "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")";
+  const n = TIMELINE.length, span = COLS - 22, x0 = 11;
+  drawStr(R_TIME, x0, "─".repeat(span), phC + ".34)");
+  for (let i = 0; i < n; i++) {
+    const at = x0 + Math.round(i * span / (n - 1));
+    const cur = i === S.stage, done = i < S.stage;
+    const c = cur ? bright : (done ? phC + ".74)" : phC + ".40)");
+    drawStr(R_TIME, at, cur ? "▣" : "▫", c);
+    drawStr(R_TIME + 1, at - 1, TIMELINE[i], c);
+  }
+  /* 规格读数：把「这台机器是多少个点云采样出来的」直接写在画面上 */
+  const spec = "◈ POINT CLOUD " + s.NP.toLocaleString("en-US") + " PTS"
+    + "  ·  MESH " + s.nBoxes + " BOXES"
+    + "  ·  SS " + SS + "\u00d7" + SS;
+  drawStr(R_TIME + 2, COLS - strCells(spec) - 3, spec, phC + ".70)");
+}
+
+/* 字幕 */
+/* 右下角机型铭牌：按真实字宽右对齐，所以能放大到普通字符的两倍多 */
+const PLATE_SIZE = 27;
+function drawPlate(row, str, color, size) {
+  ctx.font = size + "px " + FONT;
+  ctx.fillStyle = color;
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  const chs = Array.from(str);
+  let total = 0;
+  for (const ch of chs) total += ctx.measureText(ch).width + 1.4;
+  let x = W - 3 * CW - total;
+  const y = row * CH + CH * 0.76;
+  for (const ch of chs) {
+    if (ch !== " ") ctx.fillText(ch, x, y);
+    x += ctx.measureText(ch).width + 1.4;
+  }
+  return W - 3 * CW - total;
+}
+function drawCaption(s) {
+  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
+  drawStr(R_DIV, 2, "─".repeat(COLS - 4), phC + ".42)");
+  let n = S.capChars;
+  if (n <= 0) { drawStr(R_CAP0, 3, "█", phC + ".9)"); }
+  else {
+    const n0 = strCells(s.cap[0]);
+    drawStr(R_CAP0, 3, cutByCells(s.cap[0], Math.min(n0, n)), "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")");
+    if (n > n0 + 2) drawStr(R_CAP0 + 1, 3, cutByCells(s.cap[1], n - n0 - 2), phC + ".96)");
+  }
+  /* 右下角铭牌：型号大字 + 中文名，中间一道按磷光色发亮的竖条 */
+  const plate = "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")";
+  const x0 = drawPlate(R_CAP0, s.tag, plate, PLATE_SIZE);
+  ctx.fillStyle = plate;
+  ctx.fillRect(x0 - 16, R_CAP0 * CH + 1, 4, CH + 3);
+  drawPlate(R_CAP0 + 1, s.cn, phC + ".78)", 17);
+}
+
+/* 状态栏 */
+function drawFooter(s) {
+  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
+  const audioLive = S.sound && AC && AC.state === "running";
+  const audioTag = !S.sound ? "OFF" : ((audioLive || STILL || RENDER_MODE) ? "ON " : "♪ 点击开启");
+  /* 录片时把快捷键提示换成一行静态标注：成片里的观众按不了键，
+     而「点一下画面开启音效」更是明显的谎 —— 音轨已经在文件里了。 */
+  if (RENDER_MODE) {
+    drawStr(R_STATUS, 3, "ASCII 3D · POINT CLOUD → CHARACTER · 14 STAGES 1975—2026", phC + ".55)");
+  } else {
+    drawStr(R_STATUS, 3, "SPACE 暂停   ←→ 切镜   R 重播   C " + (S.mono ? "单色→真彩" : "真彩→单色") +
+      "   M 音效 " + audioTag + "   F 全屏", phC + (audioLive || !S.sound ? ".80)" : ".52)"));
+    /* 键击声还没解锁时，顶栏右侧提示一句（浏览器自动播放策略要求先有一次用户交互） */
+    if (S.sound && !audioLive && !STILL && S.st > 1.4) {
+      const hint = "♪ 键盘敲击声 · 点一下画面或按任意键开启";
+      drawStr(1, COLS - 2 - strCells(hint), hint, phC + ".50)");
+    }
+  }
+  const right = (S.playing ? "▶ RUN" : "‖ PAUSE") + "   " + S.st.toFixed(1) + "s / " + s.dur.toFixed(1) + "s";
+  drawStr(R_STATUS, COLS - strCells(right) - 3, right, phC + ".80)");
+}
+
+/* 结束卡 */
+function drawEndCard() {
+  const Q2 = [96, 220, 255];
+  const ph = "rgb(" + Q2[0] + "," + Q2[1] + "," + Q2[2] + ")";
+  const phd = "rgba(" + Q2[0] + "," + Q2[1] + "," + Q2[2] + ",";
+  const cx = 22, N = STAGES.length;
+  const title = N + " / " + TOTAL + " STAGES RENDERED";
+  drawStr(4, cx, "╔══════════════════════════════════════════════════════════════════════════╗", phd + ".45)");
+  drawStr(5, cx, "║  COMPLETE BUILD · " + title.padEnd(54, " ") + "║", ph);
+  drawStr(6, cx, "║  个人电脑发展史 · 终端 ASCII 3D 科普动画 · 1975 → 2026                    ║", phd + ".8)");
+  drawStr(7, cx, "╚══════════════════════════════════════════════════════════════════════════╝", phd + ".45)");
+  drawStr(10, cx, "  STAGE  YEAR   MACHINE                            POST     NOTE", phd + ".55)");
+  drawStr(11, cx, "  ───────────────────────────────────────────────────────────────────────────", phd + ".22)");
+  for (let i = 0; i < N; i++) {
+    const s = STAGES[i];
+    drawStr(12 + i, cx, "  " + String(s.n).padStart(3, "0") + "    " + s.year + "   " +
+      s.tag.padEnd(35, " ") + " OK     " + s.note,
+      i === N - 1 ? ph : phd + ".66)");
+  }
+  const y0 = 13 + N;
+  drawStr(y0, cx, "  " + N + " 代机型 · 每台都是点云采样后逐字符映射的 ASCII 3D，" +
+    "点云规模见每帧右下角读数。", phd + ".72)");
+  /* 内存增长火花线：14 格高度 = 世界对数量级的映射。
+     线性刻度下前 10 代全贴地（256 B 和 64 GB 差 10^8 倍），只有对数轴看出是斜线。 */
+  const SPK = "▁▂▃▄▅▆▇█";
+  const lgA = Math.log10(STAGES[0].mem), lgB = Math.log10(STAGES[N - 1].mem);
+  let spark = "";
+  for (let i = 0; i < N; i++) {
+    const q = (Math.log10(STAGES[i].mem) - lgA) / (lgB - lgA);
+    spark += SPK[Math.min(7, Math.max(0, Math.round(q * 7)))];
+  }
+  drawStr(y0 + 2, cx, "  MEMORY " + spark + "   " + fmtMem(STAGES[0].mem) + " → " +
+    fmtMem(STAGES[N - 1].mem) + " · 50 年 2.7×10^8 倍 · 对数刻度", phd + ".74)");
+  if (!RENDER_MODE) {
+    drawStr(y0 + 4, cx, "  R 重播      ← 回到第 " + N + " 代      → 下一镜      SPACE 暂停", phd + ".5)");
+    if (Math.floor(nowMs() / 400) % 2 === 0) drawStr(y0 + 4, cx + 62, "█", ph);
+  } else {
+    drawStr(y0 + 4, cx, "  █", ph);
+  }
+}
+
+/* ─────────────────────────── 9. 调试：?preview=1 直接看深度/亮度缓冲 ─────────────────────────── */
+const Q = new URLSearchParams(location.search);
+const PREVIEW = Q.get("preview") === "1";
+const PVW = 480, PVH = 180;
+let pvCv = null, pvCtx = null, pvImg = null;
+/* 把归约后的亮度 × 覆盖率画成一张灰度图：检查点云密度与遮挡是否正确 */
+function previewPass(s) {
+  if (!pvCv) {
+    pvCv = document.createElement("canvas");
+    pvCv.width = PVW; pvCv.height = PVH;
+    pvCv.style.cssText = "position:fixed;left:8px;top:8px;z-index:80;border:1px solid #35ff66;image-rendering:pixelated";
+    document.body.appendChild(pvCv);
+    pvCtx = pvCv.getContext("2d");
+    pvImg = pvCtx.createImageData(PVW, PVH);
+  }
+  const d = pvImg.data;
+  const AHs = s.AHs;
+  const sx = PVW / AW, sy = PVH / AHs;
+  for (let y = 0; y < PVH; y++) {
+    const gy = Math.min(AHs - 1, y / sy | 0);
+    for (let x = 0; x < PVW; x++) {
+      const gx = Math.min(AW - 1, x / sx | 0);
+      const i = gy * AW + gx;
+      const p = (y * PVW + x) * 4;
+      const cov = Cbuf[i];
+      if (!cov) { d[p] = 6; d[p + 1] = 10; d[p + 2] = 7; d[p + 3] = 255; continue; }
+      const g = Math.min(255, Lbuf[i] * 330 * (0.35 + 0.65 * cov / (SS * SS * 0.55)));
+      d[p] = g * .45 | 0; d[p + 1] = g | 0; d[p + 2] = g * .55 | 0; d[p + 3] = 255;
+    }
+  }
+  pvCtx.putImageData(pvImg, 0, 0);
+}
+
+/* ─────────────────────────── 10. 音效（极简 WebAudio） ─────────────────────────── */
+let AC = null, noiseBuf = null, hum = null, lastKeyT = 0;
+function audioInit() {
+  if (AC) return;
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  /* 衰减噪声：用作低频「咚」的底噪 */
+  const n = Math.floor(AC.sampleRate * 0.25);
+  noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+}
+/* 键盘敲击 = 高频撞击瞬态（噪声带通）+ 低频「thock」（下滑三角波）。
+   只用一个噪声 tick 会像鼠标点击；补上低频那一下才有键帽砸到定位板的实感。
+   每帧可能连打十几个字，所以内部限速到 ~32 次/秒，否则会连成一片嗡声。 */
+function keyClick(power) {
+  /* 录制模式：不发声，只把这一声的「动画时间 + 全部随机参数」记下来，
+     稍后用 OfflineAudioContext 按同一份参数合成音轨，保证和现场听到的一致。 */
+  if (RENDER_MODE) { recordClick(power); return; }
+  if (!AC || AC.state !== "running") return;
+  const t = AC.currentTime;
+  /* 打字速度是 80+ 字/秒，逐字发声会连成一片嗡声；限速到 ~30 次/秒。
+     间隔加抖动，否则听起来像节拍器而不是手在敲。 */
+  if (t - lastKeyT < (1 / 30) * (0.66 + Math.random() * 0.68)) return;
+  lastKeyT = t;
+  const v = power === undefined ? 1 : power;
+  /* 每次随机微调音高与滤波中心，避免听起来像同一个采样反复播 */
+  const j = 0.86 + Math.random() * 0.28;
+  /* 1) 撞击瞬态 */
+  const s = AC.createBufferSource(); s.buffer = noiseBuf;
+  s.playbackRate.value = 1.0 + Math.random() * 0.5;
+  const bp = AC.createBiquadFilter(); bp.type = "bandpass";
+  bp.frequency.value = 2400 * j; bp.Q.value = 1.4;
+  const hp = AC.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1300;
+  const g1 = AC.createGain();
+  g1.gain.setValueAtTime(0.055 * v, t);
+  g1.gain.exponentialRampToValueAtTime(0.0005, t + 0.017);
+  s.connect(bp); bp.connect(hp); hp.connect(g1); g1.connect(AC.destination);
+  s.start(t); s.stop(t + 0.03);
+  /* 2) 键帽砸到底的低频 thock */
+  const o = AC.createOscillator(), g2 = AC.createGain();
+  o.type = "triangle";
+  o.frequency.setValueAtTime(210 * j, t);
+  o.frequency.exponentialRampToValueAtTime(95, t + 0.042);
+  g2.gain.setValueAtTime(0.034 * v, t);
+  g2.gain.exponentialRampToValueAtTime(0.0004, t + 0.052);
+  o.connect(g2); g2.connect(AC.destination);
+  o.start(t); o.stop(t + 0.06);
+}
+function beep(freq, dur, vol) {
+  if (!AC || AC.state !== "running") return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = "square"; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+  o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + dur + .02);
+}
+function humOn() {
+  if (!AC || hum) return;
+  const o1 = AC.createOscillator(), o2 = AC.createOscillator(), g = AC.createGain();
+  o1.type = "sine"; o1.frequency.value = 60; o2.type = "sine"; o2.frequency.value = 120; g.gain.value = 0.010;
+  o1.connect(g); o2.connect(g); g.connect(AC.destination); o1.start(); o2.start();
+  hum = { o1: o1, o2: o2, g: g };
+}
+function humOff() { if (hum) { try { hum.o1.stop(); hum.o2.stop(); } catch (e) { } hum = null; } }
+/* 浏览器自动播放策略：AudioContext 在用户第一次交互前是 suspended 的。
+   片中一开场就在打字，所以任何一个点击/按键都顺手把音频解锁。 */
+function audioUnlock() {
+  if (!S.sound) return;
+  audioInit();
+  if (AC && AC.state === "suspended") AC.resume();
+  humOn();
+}
+addEventListener("pointerdown", audioUnlock);
+addEventListener("keydown", audioUnlock);
+
+/* ─────────────────────────── 11. 交互 ─────────────────────────── */
+addEventListener("keydown", ev => {
+  const k = ev.key.toLowerCase();
+  if (k === " " || ev.code === "Space") { ev.preventDefault(); S.playing = !S.playing; }
+  else if (ev.key === "ArrowRight") { ev.preventDefault(); goto(S.ended ? 0 : Math.min(STAGES.length - 1, S.stage + 1)); }
+  else if (ev.key === "ArrowLeft") { ev.preventDefault(); goto(Math.max(0, S.stage - 1)); }
+  else if (k === "r") resetStage(0);
+  else if (k === "c") S.mono = !S.mono;
+  else if (k === "m") {
+    S.sound = !S.sound;
+    if (S.sound) { audioInit(); if (AC && AC.state === "suspended") AC.resume(); humOn(); } else humOff();
+  } else if (k === "f") {
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+  }
+});
+addEventListener("click", () => { if (S.sound && AC && AC.state === "suspended") AC.resume(); });
+
+/* ?stage=N&freeze=T  → 定格在第 N 镜第 T 秒（供无头截图核对）
+   ?still=1           → 定格后只画几帧就停掉 rAF 循环，让无头截图立刻完成 */
+const QS = parseInt(Q.get("stage") || "0", 10);
+const QF = parseFloat(Q.get("freeze") || "NaN");
+const QSEEK = parseFloat(Q.get("seek") || "NaN");   // 从第 1 镜开始快进 N 秒（会正常切镜）
+const STILL = Q.get("still") === "1";
+/* ?audio=1 → 加载即解锁音频（配合 chrome --autoplay-policy=no-user-gesture-required
+   做无头验证：状态栏会从「♪ 点击开启」变成「ON」，说明 AudioContext 真的跑起来了） */
+if (Q.get("audio") === "1") { audioInit(); if (AC && AC.state === "suspended") AC.resume(); humOn(); }
+
+/* ── ?render=1：给 tools/render-video.mjs 逐帧录片用 ──
+   外部按固定 fps 反复调 __renderFrame(fps)，页面内部用 1/60 的细步长把
+   整条时间线确定性推进（不依赖 rAF、不依赖真实时钟），然后重画一帧。
+   总步数是固定的（总时长 × 60），所以整段视频只需推进一次，不是每帧重算。 */
+if (Q.get("render") === "1") {
+  RENDER_MODE = true;
+  const sub = 1 / 60;
+  window.__TOTAL_SEC = () => STAGES.reduce((a, s) => a + s.dur, 0);
+  window.__TOTAL_FRAMES = fps => Math.ceil(window.__TOTAL_SEC() * fps) + 1;
+  window.__renderFrame = function (fps) {
+    const target = rAcc + 1 / fps;
+    /* advance() 第一行是 `if (S.ended || !S.playing) return;` —— 录片时必须
+       保持 playing=true，否则只有第一帧真的推进，后面全是同一画面（踩过）。 */
+    S.playing = true;
+    while (rAcc < target - 1e-9) {
+      const d = Math.min(sub, target - rAcc);
+      advance(d); rAcc += d;
+    }
+    draw();
+    /* 辉光改成画进 canvas 里，并且**在小图上模糊**：CSS 的 #bloom 是整屏
+       1600×960 做 blur(7px) + screen 混合，软件合成下一帧要 900ms —— 光它
+       就占了录片 70% 的时间。这里改成先在 400×240（像素量 1/16）上模糊
+       2.2px 再放大混合，等效半径 ≈8.8px，观感几乎一样，一帧只要几毫秒。 */
+    bctx.clearRect(0, 0, 400, 240);
+    bctx.filter = "blur(2.2px)";
+    bctx.drawImage(screen, 0, 0, 400, 240);
+    bctx.filter = "none";
+    const sc = screen.getContext("2d");
+    sc.save();
+    sc.globalCompositeOperation = "screen";
+    sc.globalAlpha = 0.55;
+    sc.imageSmoothingEnabled = true;
+    sc.drawImage(bloom, 0, 0, 400, 240, 0, 0, W, H);
+    sc.restore();
+    document.getElementById("boot").classList.add("hide");
+    document.getElementById("flick").style.opacity = 0;
+    return { t: rAcc, stage: S.stage, ended: S.ended };
+  };
+  window.__CLICK_COUNT = () => CLICKS.length;
+  /* 用与现场完全相同的参数离线合成音轨，返回 16bit 立体声 WAV 的 base64 */
+  window.__renderAudio = async function () {
+    const sec = window.__TOTAL_SEC(), sr = 44100;
+    const off = new OfflineAudioContext(2, Math.ceil(sec * sr), sr);
+    const nb = off.createBuffer(1, Math.floor(sr * 0.08), sr);
+    { const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    /* 显像管底噪：60 + 120Hz，和 humOn() 一致 */
+    for (const [f, g] of [[60, 0.010], [120, 0.010]]) {
+      const o = off.createOscillator(), gg = off.createGain();
+      o.type = "sine"; o.frequency.value = f; gg.gain.value = g;
+      o.connect(gg); gg.connect(off.destination); o.start(0); o.stop(sec);
+    }
+    for (const [ct, v, j, rate] of CLICKS) {
+      if (ct >= sec) continue;
+      const s = off.createBufferSource(); s.buffer = nb; s.playbackRate.value = rate;
+      const bp = off.createBiquadFilter(); bp.type = "bandpass";
+      bp.frequency.value = 2400 * j; bp.Q.value = 1.4;
+      const hp = off.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1300;
+      const g1 = off.createGain();
+      g1.gain.setValueAtTime(0.055 * v, ct);
+      g1.gain.exponentialRampToValueAtTime(0.0005, ct + 0.017);
+      s.connect(bp); bp.connect(hp); hp.connect(g1); g1.connect(off.destination);
+      s.start(ct); s.stop(ct + 0.03);
+      const o = off.createOscillator(), g2 = off.createGain();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(210 * j, ct);
+      o.frequency.exponentialRampToValueAtTime(95, ct + 0.042);
+      g2.gain.setValueAtTime(0.034 * v, ct);
+      g2.gain.exponentialRampToValueAtTime(0.0004, ct + 0.052);
+      o.connect(g2); g2.connect(off.destination);
+      o.start(ct); o.stop(ct + 0.06);
+    }
+    const buf = await off.startRendering();
+    /* 归一化到 -1.6dBFS，再打包成 16bit PCM WAV */
+    let peak = 0;
+    for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > peak) peak = a; } }
+    const g = peak > 1e-6 ? Math.min(1, 0.83 / peak) : 1;
+    const n = buf.length, bytes = 44 + n * 4, dv = new DataView(new ArrayBuffer(bytes));
+    const wr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    wr(0, "RIFF"); dv.setUint32(4, bytes - 8, true); wr(8, "WAVE"); wr(12, "fmt ");
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+    dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true);
+    dv.setUint16(34, 16, true); wr(36, "data"); dv.setUint32(40, n * 4, true);
+    const L = buf.getChannelData(0), R = buf.getChannelData(1);
+    for (let i = 0; i < n; i++) {
+      dv.setInt16(44 + i * 4, Math.max(-32768, Math.min(32767, Math.round(L[i] * g * 32767))), true);
+      dv.setInt16(46 + i * 4, Math.max(-32768, Math.min(32767, Math.round(R[i] * g * 32767))), true);
+    }
+    const u8 = new Uint8Array(dv.buffer);
+    let bin = "";
+    for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+    return btoa(bin);
+  };
+  /* 录片时不要再起 rAF，画面完全由 __renderFrame 驱动 */
+  document.getElementById("boot").classList.add("hide");
+  /* CSS 的辉光层换成 __renderFrame 里的 canvas 合成（快 60 倍） */
+  bloom.style.display = "none";
+}
+
+/* ─────────────────────────── 12. 主循环 ─────────────────────────── */
+resetStage(isNaN(QS) ? 0 : Math.max(0, Math.min(STAGES.length - 1, QS)));
+
+let last = performance.now(), frozen = false, stillN = 0, stopped = false;
+if (Q.get("end") === "1") { S.ended = true; S.playing = false; frozen = true; }
+
+function loop(now) {
+  if (!stopped && !RENDER_MODE) requestAnimationFrame(loop);
+  const dtReal = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  if (!isNaN(QSEEK) && !frozen) {
+    const step = 1 / 60;
+    for (let t = 0; t < QSEEK; t += step) advance(step);
+    S.playing = false; frozen = true;
+  } else if (!isNaN(QF) && !frozen) {
+    const step = 1 / 60;
+    HOLD = true;                       // freeze 是「本镜内」的秒数，不跨镜
+    for (let t = 0; t < QF; t += step) advance(step);
+    S.playing = false; frozen = true;
+  } else if (!frozen) advance(dtReal);
+
+  draw();
+  frameIdx++;
+
+  bctx.clearRect(0, 0, 400, 240);
+  bctx.drawImage(screen, 0, 0, 400, 240);
+
+  document.getElementById("boot").classList.add("hide");
+  document.getElementById("flick").style.opacity = (!STILL && Math.random() < 0.012) ? (Math.random() * 0.05) : 0;
+  if (STILL && frozen && ++stillN >= 3) stopped = true;
+}
+if (!RENDER_MODE) requestAnimationFrame(loop);
+</script>
+</body>
+</html>
