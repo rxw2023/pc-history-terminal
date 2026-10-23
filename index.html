@@ -3,85 +3,306 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PC-HISTORY POST · 个人电脑发展史</title>
+<title>个人电脑博物馆 · PC-HISTORY MUSEUM (1975—2026)</title>
+<meta name="description" content="一座开在字符终端里的个人电脑博物馆。24 件藏品，1975—2026，每一件都由点云实时重建为 ASCII 三维展品。">
 <style>
+  :root{
+    --ph:#7dffc0;
+    --ink:#e8ede9; --dim:#79847e; --dimmer:#4d5652;
+    --line:rgba(232,242,236,.12);
+    --paper:#0a0d0e;
+  }
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{
-    width:100%;height:100%;overflow:hidden;background:#020403;
-    font-family:"Cascadia Mono","Consolas","SF Mono","Menlo",monospace;
+  html,body{height:100%;overflow:hidden;background:#040506;color:var(--ink);
+    font-family:"Cascadia Mono","Consolas","SF Mono","Menlo","Microsoft YaHei",monospace;
+    -webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  ::selection{background:rgba(125,255,192,.25)}
+
+  #room{
+    position:fixed;inset:0;display:grid;
+    grid-template-columns:1fr minmax(330px,33vw);
+    grid-template-rows:54px 1fr 72px;
+    grid-template-areas:"wall wall" "view label" "nav nav";
+    background:radial-gradient(120% 100% at 26% 8%,#0c1113 0%,#050708 52%,#030405 100%);
   }
-  #viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-  /* 逻辑画布固定 1600x960，靠 transform 缩放到视口 */
-  #stage{
-    position:relative;width:1600px;height:960px;flex:none;
-    transform-origin:center center;background:#000;border-radius:14px;
-    box-shadow:
-      0 0 0 1px rgba(70,255,140,.10),
-      0 0 90px 10px rgba(0,0,0,.9),
-      inset 0 0 160px 30px rgba(0,0,0,.85);
-    overflow:hidden;
-  }
-  #screen{position:absolute;inset:0;width:100%;height:100%;display:block}
-  #bloom{
-    position:absolute;inset:0;width:100%;height:100%;display:block;
-    filter:blur(7px);mix-blend-mode:screen;opacity:.55;pointer-events:none;
-  }
-  #scan{
-    position:absolute;inset:0;pointer-events:none;z-index:3;
-    background:repeating-linear-gradient(to bottom,
-      rgba(0,0,0,0) 0px, rgba(0,0,0,0) 1px,
-      rgba(0,0,0,.30) 2px, rgba(0,0,0,.30) 3px);
-    mix-blend-mode:multiply;opacity:.58;
-  }
-  #mask{
-    position:absolute;inset:0;pointer-events:none;z-index:4;opacity:.16;
-    background:repeating-linear-gradient(to right,
-      rgba(255,0,60,.55) 0px, rgba(0,255,120,.55) 1px, rgba(40,80,255,.55) 2px,
-      rgba(0,0,0,0) 3px);
-  }
-  /* 暗角：底部那几行 HUD 正好落在原来的 82% 黑里，几乎读不出来。
-     把椭圆拉大、终点透明度压到 .58，暗角感还在，但边上不再压死。 */
-  #vig{
-    position:absolute;inset:0;pointer-events:none;z-index:5;
-    background:radial-gradient(ellipse 86% 96% at 50% 48%,
-      rgba(0,0,0,0) 48%, rgba(0,0,0,.16) 78%, rgba(0,0,0,.58) 100%);
-  }
-  #glass{
-    position:absolute;inset:0;pointer-events:none;z-index:6;
-    background:linear-gradient(168deg, rgba(190,255,220,.055) 0%, rgba(255,255,255,0) 32%);
-    box-shadow:inset 0 0 140px 22px rgba(0,0,0,.28);
-  }
-  #flick{position:absolute;inset:0;pointer-events:none;z-index:7;background:#7dffc0;opacity:0;mix-blend-mode:overlay}
-  #boot{
-    position:absolute;inset:0;z-index:9;background:#000;color:#33ff66;
-    display:flex;align-items:center;justify-content:center;font-size:22px;letter-spacing:2px;
-  }
-  #boot.hide{display:none}
-  #err{
-    position:fixed;inset:0;display:none;align-items:center;justify-content:center;
-    color:#ff6b6b;font-size:16px;padding:40px;text-align:center;z-index:99;
-  }
-  #jserr{
-    position:fixed;left:0;right:0;bottom:0;z-index:200;display:none;background:#2a0000;
-    color:#ff9090;font:12px/1.5 monospace;padding:8px;white-space:pre-wrap;max-height:45%;overflow:auto;
+
+  /* ── 墙牌 ── */
+  #wall{grid-area:wall;display:flex;align-items:center;justify-content:space-between;
+    padding:0 30px;border-bottom:1px solid var(--line);
+    font-size:11px;letter-spacing:.18em;color:var(--dim);white-space:nowrap;overflow:hidden}
+  #wall .l{display:flex;align-items:center;gap:16px;min-width:0}
+  #wall .brand{color:var(--ink);letter-spacing:.22em}
+  #wall .sep{width:1px;height:14px;background:var(--line)}
+  #wall .hall{color:var(--ph);letter-spacing:.14em}
+  #wall .r{display:flex;align-items:center;gap:14px}
+  #wall .no{color:var(--ink);letter-spacing:.1em;font-variant-numeric:tabular-nums}
+  #btnHome,#btnSnd{font-size:10px;letter-spacing:.16em;color:var(--dimmer);padding:4px 8px;
+    border:1px solid transparent;transition:color .18s,border-color .18s}
+  #btnHome:hover,#btnSnd:hover{color:var(--ink);border-color:var(--line)}
+  #btnSnd.on{color:var(--ph)}
+  #wall .brand{cursor:pointer;transition:color .18s}
+  #wall .brand:hover{color:var(--ph)}
+
+  /* 展签进场：换展品时整块文字往上抬一点点，不是打字机 */
+  @keyframes lbIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  #label.in > *:not(.ghost){animation:lbIn .46s cubic-bezier(.22,.7,.3,1) both}
+  #label.in #lbTitle{animation-delay:.04s}
+  #label.in #lbCn{animation-delay:.07s}
+  #label.in #lbSpec{animation-delay:.10s}
+  #label.in #lbWhy{animation-delay:.13s}
+  #label.in #lbDiff{animation-delay:.16s}
+
+  /* 胶片颗粒：一张 feTurbulence 的 SVG 平铺，离线可用，只为去掉「数字感」 */
+  body::after{content:"";position:fixed;inset:0;z-index:45;pointer-events:none;
+    opacity:.05;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+  /* ── 展位 ── */
+  /* 画布是透明的：展品直接飘在展厅的暗处，而不是关在一个黑矩形里 */
+  #view{grid-area:view;position:relative;overflow:hidden;min-width:0;min-height:0}
+  #fit{position:absolute;left:50%;top:50%;width:1600px;height:960px;
+    transform-origin:50% 50%;transform:translate(-50%,-50%) scale(.6)}
+  #screen{position:absolute;inset:0;width:1600px;height:960px;display:block}
+  #bloom{position:absolute;inset:0;width:1600px;height:960px;
+    filter:blur(7px);mix-blend-mode:screen;opacity:.5;pointer-events:none}
+  /* 一层极淡的扫描线，只作用于展位，边缘用遮罩化开，不留矩形边 */
+  #view::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.22) 3px,rgba(0,0,0,.22) 4px);
+    mix-blend-mode:multiply;opacity:.32;
+    -webkit-mask-image:radial-gradient(ellipse 70% 70% at 50% 50%,#000 30%,rgba(0,0,0,0) 78%);
+    mask-image:radial-gradient(ellipse 70% 70% at 50% 50%,#000 30%,rgba(0,0,0,0) 78%)}
+
+
+  /* ── 展签 ── */
+  #label{grid-area:label;position:relative;overflow:auto;min-width:0;padding:30px 40px 26px 34px;
+    border-left:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.018),rgba(0,0,0,0) 42%)}
+  /* 滚动条：Windows 那条带上下箭头的白色滚动条在暗场里极其刺眼，
+     统一收成一条 6px 的暗条；Firefox 走 scrollbar-width/color，
+     Chrome 121+ 会优先用这一套、忽略 ::-webkit-scrollbar，两边表现一致。 */
+  *{scrollbar-width:thin;scrollbar-color:rgba(232,242,236,.16) transparent}
+  *::-webkit-scrollbar{width:6px;height:6px}
+  *::-webkit-scrollbar-track,*::-webkit-scrollbar-corner{background:transparent}
+  *::-webkit-scrollbar-thumb{background:rgba(232,242,236,.14);border-radius:3px}
+  *::-webkit-scrollbar-thumb:hover{background:rgba(232,242,236,.30)}
+  *::-webkit-scrollbar-button{display:none;width:0;height:0}
+  #label::-webkit-scrollbar{width:4px}
+  #label::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12)}
+  #label .ghost{position:absolute;right:20px;top:6px;font-size:92px;line-height:1;
+    letter-spacing:-.04em;color:var(--ph);opacity:.055;pointer-events:none;font-weight:400}
+  #label .kicker{font-size:11px;letter-spacing:.2em;color:var(--dim);margin-bottom:20px;position:relative}
+  #lbTitle{font-size:28px;line-height:1.18;font-weight:500;letter-spacing:.02em;position:relative}
+  #lbCn{font-size:14px;color:var(--ph);letter-spacing:.08em;margin-top:7px;opacity:.9}
+  #label .rule{height:1px;background:var(--line);margin:20px 0 18px}
+  #lbSpec{display:grid;grid-template-columns:auto 1fr;gap:9px 14px;font-size:12px;line-height:1.35}
+  #lbSpec dt{color:var(--dimmer);letter-spacing:.12em;white-space:nowrap}
+  #lbSpec dd{color:#cfd8d1;letter-spacing:.01em}
+  #lbWhy{margin-top:20px;font-size:13px;line-height:1.95;color:#b7c1ba;text-align:justify}
+  #lbDiff{margin-top:14px;font-size:12px;line-height:1.8;color:var(--ph);opacity:.82;
+    padding-left:12px;border-left:2px solid var(--ph)}
+  #lbDiff b{font-weight:500;color:#fff;opacity:.92}
+  #label .foot{margin-top:22px;padding-top:12px;border-top:1px solid var(--line);
+    font-size:10px;letter-spacing:.18em;color:var(--dimmer);display:flex;justify-content:space-between;gap:10px}
+
+  /* ── 底部导航 ── */
+  #nav{grid-area:nav;display:flex;align-items:center;gap:22px;padding:0 28px;
+    border-top:1px solid var(--line);font-size:11px;letter-spacing:.14em;color:var(--dim)}
+  #nav .btn{padding:7px 12px;border:1px solid transparent;color:var(--dim);white-space:nowrap;
+    transition:color .15s,border-color .15s}
+  #nav .btn:hover{color:var(--ink);border-color:var(--line)}
+  #track{flex:1;display:flex;align-items:center;gap:3px;height:26px;min-width:0}
+  #track .hallgap{width:7px;flex:none}
+  #track span{flex:1;height:12px;min-width:2px;background:rgba(232,242,236,.15);cursor:pointer;
+    transition:height .18s,background .18s}
+  #track span:hover{background:rgba(232,242,236,.42)}
+  #track span.on{height:26px;background:var(--ph);box-shadow:0 0 12px var(--ph)}
+  #track span.seen{background:rgba(232,242,236,.30)}
+  #nav .tools{display:flex;gap:4px;flex:none}
+  #nav .key{color:var(--dimmer);margin-right:5px}
+
+  /* ── 电影模式：清屏，只留展品、字幕、一条进度 ── */
+  body.tour #wall, body.tour #label, body.tour #nav{display:none}
+  body.tour #room{grid-template-columns:1fr;grid-template-rows:1fr;grid-template-areas:"view"}
+  body.tour #view::before{opacity:.5}
+  #film{position:fixed;inset:auto 0 0 0;z-index:20;display:none;pointer-events:none;
+    padding:70px 0 22px;
+    background:linear-gradient(to bottom,rgba(0,0,0,0) 0%,rgba(0,0,0,.5) 48%,rgba(0,0,0,.86) 100%)}
+  body.tour #film{display:block}
+  #film .cap{width:min(1040px,88vw);margin:0 auto}
+  #film .cap i{display:block;font-style:normal;font-size:10.5px;letter-spacing:.2em;
+    color:var(--ph);opacity:.72;margin-bottom:9px}
+  #film .cap b{font-weight:500;font-size:15px;letter-spacing:.05em;color:#fff}
+  #film .cap span{font-size:13px;color:var(--dim);margin-left:9px}
+  #film .cap p{margin-top:8px;font-size:12.5px;line-height:1.8;color:#a3ada6;max-width:64ch}
+  #filmBar{margin:14px auto 0;width:min(1040px,88vw);height:2px;position:relative;
+    background:rgba(255,255,255,.13)}
+  #filmBar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--ph);
+    box-shadow:0 0 10px var(--ph);transition:width .12s linear}
+  #filmHint{position:fixed;right:22px;top:16px;z-index:21;display:none;
+    font-size:10px;letter-spacing:.18em;color:var(--dimmer)}
+  body.tour #filmHint{display:block}
+  body.tour.paused #filmHint{color:var(--ph)}
+  .row2{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
+  .enter.ghost{border-color:rgba(255,255,255,.22);color:var(--dim)}
+  .enter.ghost:hover{background:rgba(255,255,255,.08);color:var(--ink)}
+
+  /* ── 覆盖层 ── */
+  .veil{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+    padding:24px;background:rgba(3,4,5,.9);backdrop-filter:blur(7px);transition:opacity .28s ease}
+  .veil.off{opacity:0;pointer-events:none}
+  .card{flex:0 1 760px;width:100%;max-width:760px;max-height:88vh;overflow:auto;padding:6px 4px}
+  .eyebrow{font-size:11px;letter-spacing:.26em;color:var(--ph);opacity:.8;margin-bottom:26px}
+  .card h1{font-size:clamp(30px,4.4vw,46px);font-weight:500;letter-spacing:.06em;line-height:1.2}
+  .card .sub{font-size:12px;letter-spacing:.22em;color:var(--dim);margin-top:12px}
+  .lede{margin-top:26px;font-size:13.5px;line-height:2.05;color:#a9b3ac;max-width:56ch}
+  .halls{margin:32px 0 6px;display:grid;gap:1px;background:var(--line)}
+  .hrow{background:#06080a;display:grid;grid-template-columns:34px 84px 1fr auto;gap:14px;
+    align-items:baseline;padding:13px 16px;text-align:left;transition:background .15s}
+  .hrow:hover{background:#0d1214}
+  .hrow i{font-style:normal;color:var(--dimmer);font-size:11px;letter-spacing:.12em}
+  .hrow b{font-weight:500;font-size:13px;letter-spacing:.1em;color:var(--ink)}
+  .hrow s{text-decoration:none;font-size:12px;color:var(--dim);letter-spacing:.04em}
+  .hrow em{font-style:normal;font-size:11px;color:var(--dimmer);letter-spacing:.1em}
+  .enter{margin-top:34px;padding:13px 26px;border:1px solid var(--ph);color:var(--ph);
+    font-size:12px;letter-spacing:.22em;transition:background .18s,color .18s}
+  .enter:hover{background:var(--ph);color:#04120c}
+  .hint{margin-top:22px;font-size:11px;letter-spacing:.12em;color:var(--dimmer);line-height:1.9}
+
+  /* 导览 */
+  .gcard{flex:0 1 1000px;width:100%;max-width:1000px;max-height:86vh;overflow:auto}
+  .gh{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+    padding-bottom:14px;border-bottom:1px solid var(--line);font-size:12px;letter-spacing:.2em;color:var(--dim)}
+  .gh b{color:var(--ink);font-weight:500;letter-spacing:.14em}
+  .gsec{margin-top:24px}
+  .gsec h3{font-size:11px;letter-spacing:.2em;color:var(--ph);font-weight:400;margin-bottom:10px;opacity:.85}
+  .gitem{display:grid;grid-template-columns:42px 48px 1fr auto;gap:12px;align-items:baseline;
+    padding:8px 10px;font-size:12px;color:#a8b2ab;text-align:left;border-bottom:1px solid rgba(232,242,236,.055)}
+  .gitem:hover{background:rgba(255,255,255,.045);color:#fff}
+  .gitem.cur{background:rgba(125,255,192,.07);color:#fff}
+  .gitem i{font-style:normal;color:var(--dimmer);font-size:10.5px;letter-spacing:.1em}
+  .gitem u{text-decoration:none;color:var(--dimmer);font-size:11px}
+  .gitem em{font-style:normal;color:var(--dim);font-size:11px;letter-spacing:.02em}
+
+  @media (max-width:900px),(max-aspect-ratio:1/1){
+    #room{grid-template-columns:1fr;grid-template-rows:46px minmax(0,1fr) 52px auto;
+      grid-template-areas:"wall" "view" "nav" "label"}
+    #wall{padding:0 14px;gap:8px;font-size:9.5px;letter-spacing:.1em}
+    #wall .brand{display:none}
+    #wPos,#wPos + .sep{display:none}
+    #label{border-left:0;border-top:1px solid var(--line);padding:16px 18px 18px;max-height:44vh}
+    #label .ghost{font-size:64px;top:2px;right:12px}
+    #lbTitle{font-size:19px}
+    #lbWhy{font-size:12px;line-height:1.85;margin-top:14px}
+    #nav{padding:0 10px;gap:8px;font-size:10px;letter-spacing:.06em}
+    #nav .btn{padding:5px 7px}
+    #nav .tools{display:flex;gap:0}
+    #nav .tools #btnMono,#nav .tools #btnFull{display:none}
+    #track{gap:2px}
+    #track span.on{height:22px}
+    .hrow{grid-template-columns:26px 1fr;gap:6px 10px}
+    .hrow s,.hrow em{display:none}
   }
 </style>
 </head>
 <body>
-<div id="viewport">
-  <div id="stage">
-    <canvas id="screen"></canvas>
-    <canvas id="bloom"></canvas>
-    <div id="scan"></div><div id="mask"></div><div id="vig"></div><div id="glass"></div>
-    <div id="flick"></div>
-    <div id="boot">PC-HISTORY POST<br><span style="font-size:14px;opacity:.6">初始化字符显示终端 ...</span></div>
+<div id="room">
+  <header id="wall">
+    <div class="l">
+      <span class="brand" id="brand" title="回到序厅">PC-HISTORY MUSEUM</span>
+      <span class="sep"></span>
+      <span class="hall" id="wHall">HALL I · 起源</span>
+      <span class="sep"></span>
+      <span id="wYears">1975 — 1977</span>
+    </div>
+    <div class="r">
+      <button id="btnHome" title="回到序厅（H）">⌂ 首页</button>
+      <span class="sep"></span>
+      <button id="btnSnd" title="音效开关（M）">♪ 音效 关</button>
+      <span class="sep"></span>
+      <span id="wPos">本厅 3 件</span>
+      <span class="sep"></span>
+      <span class="no" id="wNo">№ 01 / 24</span>
+    </div>
+  </header>
+
+  <main id="view">
+    <div id="fit">
+      <canvas id="screen" width="1600" height="960" role="img" aria-label="展品点云三维图像"></canvas>
+      <canvas id="bloom" width="400" height="240"></canvas>
+    </div>
+  </main>
+
+  <aside id="label">
+    <div class="ghost" id="lbGhost">01</div>
+    <div class="kicker" id="lbKicker">1975 · 美国 · 套件散件</div>
+    <h1 id="lbTitle">MITS ALTAIR 8800</h1>
+    <div id="lbCn">阿尔泰 8800</div>
+    <div class="rule"></div>
+    <dl id="lbSpec"></dl>
+    <p id="lbWhy"></p>
+    <p id="lbDiff"></p>
+    <div class="foot"><span id="lbHall">展厅 I · 起源</span><span>点云重建 · ASCII 3D</span></div>
+  </aside>
+
+  <nav id="nav">
+    <button class="btn" id="prev"><span class="key">←</span>上一件</button>
+    <div id="track"></div>
+    <button class="btn" id="next">下一件<span class="key" style="margin:0 0 0 5px">→</span></button>
+    <div class="tools">
+      <button class="btn" id="btnTour"><span class="key">P</span>电影</button>
+      <button class="btn" id="btnGuide"><span class="key">G</span>导览</button>
+      <button class="btn" id="btnMono"><span class="key">C</span>单色</button>
+      <button class="btn" id="btnFull"><span class="key">F</span>全屏</button>
+    </div>
+  </nav>
+</div>
+
+<div id="film">
+  <div class="cap" id="fCap"></div>
+  <div id="filmBar"><i id="fBar"></i></div>
+</div>
+<div id="filmHint">空格 暂停　·　ESC 退出　·　← → 换件</div>
+
+<div class="veil" id="intro">
+  <div class="card">
+    <div class="eyebrow">常设展 · 1975 — 2026</div>
+    <h1>个人电脑博物馆</h1>
+    <div class="sub">PC-HISTORY MUSEUM · 24 件藏品 · 全部由点云实时重建</div>
+    <p class="lede">这里没有视频。每一件展品都是当场算出来的 —— 几万个采样点从盒子上落下来，投影、测深、着色，最后落进一张字符网格里。它会缓慢转动，你可以停在任意一件前面看多久都行。</p>
+    <div class="halls" id="introHalls"></div>
+    <div class="row2">
+      <button class="enter" id="btnEnter">入场参观 ›</button>
+      <button class="enter ghost" id="btnTourIntro">▶ 电影模式 · 3′24″</button>
+    </div>
+    <p class="hint">← → 逐件浏览 · P 电影模式 · G 全馆导览 · C 单色 / 真彩 · F 全屏<br>五个展厅，从一排开关走到一块玻璃，再走到一颗芯片。<br>要看带旁白与字幕的那支成片：<a href="film.html" style="color:var(--ph)">film.html</a>（4′18″，自动播放）。</p>
   </div>
 </div>
-<div id="err"></div>
-<div id="jserr"></div>
+
+<div class="veil off" id="filmEnd">
+  <div class="card">
+    <div class="eyebrow">巡馆结束 · 1975 — 2026</div>
+    <h1 style="font-size:clamp(26px,3.4vw,36px)">24 / 24 件</h1>
+    <p class="lede">五十年，个人电脑把计算一件一件地还给了个人。重看一遍也不会是同一批画面 —— 每件展品每次都停在不同的角度。</p>
+    <div class="row2">
+      <button class="enter" id="btnReplay">重看一遍</button>
+      <button class="enter ghost" id="btnBackHall">回到展厅</button>
+      <a class="enter ghost" id="lnkFilm" href="film.html" style="text-decoration:none;display:inline-block">看原片 · 4′18″</a>
+    </div>
+  </div>
+</div>
+
+<div id="jserr" style="position:fixed;left:0;right:0;bottom:0;z-index:200;display:none;background:#2a0000;color:#ff9090;font:12px/1.5 monospace;padding:8px;white-space:pre-wrap;max-height:45%;overflow:auto"></div>
+
+<div class="veil off" id="guide">
+  <div class="gcard">
+    <div class="gh"><b>全馆导览</b><span>24 件藏品 · 5 个展厅 · 1975—2026</span></div>
+    <div id="glist"></div>
+    <p class="hint">点击任意展品前往 · ESC 返回展厅</p>
+  </div>
+</div>
 
 <script>
-/* 自检：任何脚本错误都直接画在页面底部，便于无头截图排查 */
+/* 自检：脚本错误直接画在页面底部，便于无头截图排查 */
 window.__ERR__ = [];
 (function () {
   function show() {
@@ -91,8 +312,7 @@ window.__ERR__ = [];
     d.textContent = "JS ERROR\n" + window.__ERR__.join("\n");
   }
   window.addEventListener("error", function (e) {
-    window.__ERR__.push((e.message || "?") + "  @" + (e.filename || "").split("/").pop() + ":" + e.lineno +
-      (e.error && e.error.stack ? "\n" + e.error.stack.split("\n").slice(0, 3).join("\n") : ""));
+    window.__ERR__.push((e.message || "?") + "  @" + (e.filename || "").split("/").pop() + ":" + e.lineno);
     show();
   });
   window.addEventListener("unhandledrejection", function (e) { window.__ERR__.push("REJECT " + e.reason); show(); });
@@ -101,59 +321,66 @@ window.__ERR__ = [];
 <script>
 "use strict";
 /* ══════════════════════════════════════════════════════════════════════════
-   PC-HISTORY POST · 个人电脑发展史（终端风格 · ASCII 3D 科普动画）
-   结构：整部片子 = 一台机器从 1975 冷启动到今天的一次开机自检（POST）
+   个人电脑博物馆 · 一座开在字符终端里的常设展
+   展陈：24 件藏品 / 5 个展厅，一件一件地看，不按时间自动播放
    渲染：点云 —— 每个盒子采样成点云 → 投影 → 3×3 超采样深度缓冲 →
          相机空间 key/ambient/rim 光照 → 覆盖率剪影 + Sobel + 字符梯度
-         做法参考 RuiC-motion-reel 的 engine/three.py（那边是排序散射，这里换 z-buffer）
-   零依赖：整个动画就是这一个 HTML 文件
+         引擎思路取自 RuiC-motion-reel 的 engine/three.py（那边排序散射，这里 z-buffer）
+   零依赖：整个展馆就是这一个 HTML 文件
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ─────────────────────────── 0. 版面常量 ─────────────────────────── */
 const COLS = 160, ROWS = 48, CW = 10, CH = 20;      // 文本网格 1600 x 960
-const R_HEADER = 0;
-const R_LOG0 = 2, LOG_ROWS = 9, LOG_COL = 2, LOG_W = 84;
-const M_Y0 = 8, M_ROWS = 36;                        // 3D 区 rows 8..43（720px）
+const M_Y0 = 5, M_ROWS = 40;                        // 展品区 rows 5..45
 const MW = 8, MH = 16;                              // 3D 字符格（比文本更细）
 const AW = 120, AH = 45;                            // 3D 网格 120 x 45 = 5400 格
-const M_X0 = ((COLS * CW) - AW * MW) / 2;           // 3D 区水平居中 → 320px
-const R_DIV = 44, R_CAP0 = 45, R_STATUS = 47;
-const M_ASPECT = (AW * MW) / (AH * MH);             // = 960/720 = 1.3333
+const M_X0 = ((COLS * CW) - AW * MW) / 2;           // 展品区水平居中 → 320px
 
 const W = COLS * CW, H = ROWS * CH;
 const RAMP = " .:-=+*#%@";
 const NRAMP = RAMP.length;
 const NPHOS = 24;
 const FONT = '"Cascadia Mono","Consolas","SF Mono","Menlo","Microsoft YaHei",monospace';
-const FSIZE = 17;
 const MFSIZE = 15;                                  // 3D 字符字号
-
 const charCells = ch => (ch.codePointAt(0) > 0x2e80 ? 2 : 1);
 
 /* ─────────────────────────── 1. 画布 ─────────────────────────── */
 const screen = document.getElementById("screen");
-screen.width = W; screen.height = H;
-const ctx = screen.getContext("2d", { alpha: false });
-
+const ctx = screen.getContext("2d");
 const bloom = document.getElementById("bloom");
-bloom.width = 400; bloom.height = 240;
 const bctx = bloom.getContext("2d");
-
-const stageEl = document.getElementById("stage");
+const fitEl = document.getElementById("fit");
 const Q0 = new URLSearchParams(location.search);
-/* ?zoom=Z&cx=X&cy=Y —— 调试用：把逻辑画布的某个区域放大铺满窗口 */
-const ZOOM = parseFloat(Q0.get("zoom") || "0");
-function resize() {
-  if (ZOOM > 0) {
-    const cx = parseFloat(Q0.get("cx") || "0"), cy = parseFloat(Q0.get("cy") || "0");
-    stageEl.style.transformOrigin = "0 0";
-    stageEl.style.transform = "scale(" + ZOOM + ") translate(" + (-cx) + "px," + (-cy) + "px)";
-    return;
-  }
-  const s = Math.min(innerWidth / W, innerHeight / H) * 0.97;
-  stageEl.style.transform = "scale(" + s + ")";
+
+/* 缩放与对位：先算清这件展品在网格里实际占多少（projExtent 已经给出了
+   摆动范围内的最大投影轮廓），再反推缩放，让每一件都填满展位的九成 ——
+   扁平的 Apple II 和高瘦的 Macintosh 不会被同一把尺子量成一大一小。
+   位置也按轮廓中心对到展位中心，不靠手调偏移。 */
+function layout() {
+  const v = document.getElementById("view");
+  const vw = v.clientWidth || innerWidth, vh = v.clientHeight || innerHeight;
+  const cur = EXHIBITS[S.i];
+  if (!cur || !cur._built) { fitEl.style.transform = "translate(-50%,-50%) scale(.6)"; return; }
+  const ex = cur._ex || (cur._ex = projExtent(cur));
+  const aspect = (AW * MW) / (cur.AHs * MH);
+  const FX = (AW / 2) / (TAN_Y * aspect), FY = (cur.AHs / 2) / TAN_Y;
+  const cols = ex.w * FX / cur.baseDist, rows = ex.h * FY / cur.baseDist;
+  /* 电影模式没有展签，展位是整屏；但底下要留一条字幕带，所以可用高度减掉它，
+     画面中心也上移一点，别让展品压在字上 */
+  const tour = S.mode === "tour";
+  const pad = tour ? 170 : 0;
+  const vwUse = vw * 0.78;
+  const vhUse = (vh - pad) * (tour ? 0.86 : 0.74);
+  const s = Math.min(vwUse / (cols * MW), vhUse / (rows * MH));
+  /* 轮廓中心（世界投影）→ 网格坐标 → 画布像素 */
+  const ocx = M_X0 + (AW / 2 + ex.cx * FX / cur.baseDist) * MW;
+  const ocy = (cur.mY0 + cur.AHs / 2 - ex.cy * FY / cur.baseDist) * CH;
+  const dx = -(ocx - W / 2) * s;
+  const dy = -(ocy - H / 2) * s + (tour ? ((vh - pad) / 2 - vh / 2) : 0);
+  fitEl.style.transform = "translate(-50%,-50%) translate(" + dx.toFixed(1) + "px," +
+    dy.toFixed(1) + "px) scale(" + s.toFixed(4) + ")";
 }
-addEventListener("resize", resize); resize();
+addEventListener("resize", layout);
 
 /* ─────────────────────────── 2. 点云渲染引擎 ───────────────────────────
    不做三角形光栅化。思路取自 RuiC-motion-reel 的 engine/three.py：
@@ -731,370 +958,495 @@ function normalize(boxes, corners) {
   };
 }
 
-/* ─────────────────────────── 4. 分镜数据 ─────────────────────────── */
-const POST_W = 80;
-function pl(label, value) {
-  const l = String(label).toUpperCase(), v = String(value).toUpperCase(), tail = " OK";
-  const room = POST_W - l.length - v.length - tail.length - 4;
-  const d1 = Math.max(1, Math.round(room * 0.42)), d2 = Math.max(1, room - d1);
-  return (l + " " + ".".repeat(d1) + " " + v + " " + ".".repeat(d2) + tail).slice(0, POST_W);
-}
-const P = (id, label, value) => ({ id: id, label: label, value: value, text: pl(label, value) });
+/* ─────────────────────────── 2. 展品配色（第二组） ─────────────────────────── */
+/* 原有 14 台的配色在 C 里；新增 9 台另立一组，免得动到旧机型 */
+const D = {
+  petCase: 0xd6d1c2, petSeam: 0xbdb7a6, petDark: 0x26231d, petKey: 0x9c9686,
+  petScreen: 0x4adf82, petScreenBg: 0x08160c, petSlot: 0x090a08, petChip: 0x8d8776,
+  macCase: 0xcac4b2, macBezel: 0x1b1813, macScreen: 0x9aa79a, macScreenHi: 0xd7ded4,
+  macSlot: 0x141210, macDark: 0x2e2a22, macKey: 0xb9b3a2, macKeyHi: 0xd2ccba,
+  gwCase: 0xd6d0bd, gwSeam: 0xbcb6a4, gwBezel: 0x35312a, gwDark: 0x1c1a16,
+  gwSlot: 0x08090a, gwScreen: 0x42e07a, gwLed: 0x4cff72, gwRed: 0xc0392b, gwKey: 0xbab3a1,
+  ps2Case: 0xc2c5c3, ps2Bezel: 0xd2d5d3, ps2Dark: 0x2b2d2f, ps2Slot: 0x0b0c0d,
+  ps2Blue: 0x4470a8, ps2Led: 0x4cff72, ps2Key: 0xb4b7b5,
+  nxCube: 0x2b2b31, nxEdge: 0x66666f, nxBezel: 0x271f1a, nxScreen: 0xc9cfd4, nxKey: 0x202024,
+  lgCase: 0xdad4c1, lgBezel: 0xc6c0ac, lgDark: 0x3b362c, lgKey: 0xbdb6a2,
+  lgScreen: 0x8fd0ff, lgLed: 0x4cff72, lgSpeaker: 0x4a463c,
+  kpCase: 0x3b4148, kpDark: 0x191d21, kpBezel: 0x0b0d10, kpScreen: 0x9fd8ff,
+  kpAlu: 0x5a6169, kpRed: 0xc93b2f,
+  sdBody: 0x2b2e34, sdGrip: 0x191b1f, sdScreen: 0x8fdcff, sdStick: 0x5d6169,
+  sdBtn: 0xb9bec6, sdSlot: 0x08090a,
+  vpGlass: 0x24272c, vpAlu: 0xb3b9c1, vpDark: 0x0f1114, vpSeal: 0xc6c8c6, vpStrap: 0x33373d
+};
 
-const STAGES = [
-  {
-    n: 1, year: "1975", tag: "MITS ALTAIR 8800", cn: "阿尔泰 8800",
-    shot: "dolly", mem: 256,
-    ph: [255, 152, 42], accents: [[255, 48, 24], [120, 120, 120]],
-    az: 0.62, elev: 13, spin: 1.00, margin: 1.06,
-    build: buildAltair,
-    post: [
-      { raw: "POST 1975-01  MITS ALTAIR 8800 .................... COLD START" },
-      P("CPU", "CPU", "INTEL 8080 @ 2.000 MHZ"),
-      P("MEM", "MEMORY", "000256 BYTES"),
-      P("WORDSIZE", "WORDSIZE", "8 BIT"),
-      P("PANEL", "FRONT PANEL", "25 TOGGLE / 36 LED"),
-      P("STORAGE", "STORAGE", "PAPER TAPE READER"),
-      P("SOFTWARE", "SOFTWARE", "ALTAIR BASIC 4K"),
-      P("PRICE", "PRICE", "USD 397 (KIT FORM)")
-    ],
-    cap: ["1975 · MITS ALTAIR 8800 · 阿尔泰 8800",
-          "登上《大众电子》封面的那台「能自己拥有的计算机」，让「个人」二字第一次有了硬件的形状。"],
-    note: "KIT USD 397"
-  },
-  {
-    n: 2, year: "1977", tag: "APPLE ][", cn: "苹果二号",
-    shot: "hero", mem: 49152,
-    ph: [86, 255, 132], accents: [[86, 255, 140], [40, 40, 46]],
-    az: 0.55, elev: 17, spin: 1.15, margin: 1.06,
-    build: buildApple2,
-    post: [
-      { raw: "POST 1977-04  APPLE ][ ............................. COLD START" },
-      P("CPU", "CPU", "MOS 6502 @ 1.023 MHZ"),
-      P("MEM", "MEMORY", "0004 KB -> 0048 KB"),
-      P("VIDEO", "VIDEO", "COLOR NTSC 280x192"),
-      P("SLOTS", "EXPANSION", "8 SLOT BUS"),
-      P("STORAGE", "STORAGE", "CASSETTE / DISK ]["),
-      P("SOFTWARE", "SOFTWARE", "APPLE DOS 3.3 + BASIC"),
-      P("PRICE", "PRICE", "USD 1298")
-    ],
-    cap: ["1977 · APPLE ][ · 苹果二号",
-          "彩色图形 + 8 条开放扩展槽：电脑第一次不只是「算得快」，而是「可以被改装」。"],
-    note: "8 SLOT BUS"
-  },
-  {
-    n: 3, year: "1981", tag: "IBM PC 5150", cn: "IBM 个人电脑",
-    shot: "hero", mem: 655360, burst: [7.20, 10.40],
-    ph: [64, 255, 108], accents: [[64, 255, 108], [64, 255, 108]],
-    az: 0.72, elev: 16, spin: 0.90, margin: 1.05,
-    build: buildIBMPC,
-    post: [
-      { raw: "POST 1981-08  IBM PC 5150 .......................... COLD START" },
-      P("CPU", "CPU", "INTEL 8088 @ 4.77 MHZ"),
-      P("MEM", "MEMORY", "000016 KB -> 000256 KB"),
-      P("BUS", "BUS", "8 BIT ISA / OPEN ARCH"),
-      P("STORAGE", "STORAGE", '5.25" FDD 160 KB x2'),
-      P("VIDEO", "VIDEO", "MDA 80x25 MONOCHROME"),
-      P("SOFTWARE", "SOFTWARE", "PC-DOS 1.00"),
-      P("PRICE", "PRICE", "USD 1565")
-    ],
-    cap: ["1981 · IBM PC 5150 · IBM 个人电脑",
-          "开放架构 + 公开的 BIOS 清单，让「兼容机」成为产业：个人电脑的行业标准就此定型。"],
-    note: "OPEN ARCH"
-  },
-  {
-    n: 4, year: "1982", tag: "COMMODORE 64", cn: "康懋达 64",
-    shot: "orbit", mem: 65536,
-    ph: [150, 246, 255], accents: [[80, 215, 255], [74, 99, 232]],
-    az: 0.68, elev: 21, spin: 1.20, margin: 1.05,
-    build: buildC64,
-    post: [
-      { raw: "POST 1982-08  COMMODORE 64 ......................... COLD START" },
-      P("CPU", "CPU", "MOS 6510 @ 1.023 MHZ"),
-      P("MEM", "MEMORY", "000064 KB"),
-      P("VIDEO", "VIDEO", "VIC-II 320x200 / 16 COL"),
-      P("SOUND", "SOUND", "SID 6581 / 3 VOICES"),
-      P("STORAGE", "STORAGE", "DATASSETTE / 1541 FDD"),
-      P("SOFTWARE", "SOFTWARE", "KERNAL + BASIC 2.0"),
-      P("PRICE", "PRICE", "USD 595")
-    ],
-    cap: ["1982 · COMMODORE 64 · 康懋达 64",
-          "史上最畅销的单一电脑型号（约 1700 万台）：电脑从工具变成家电，从办公室走进客厅。"],
-    note: "17,000,000 UNITS"
-  },
-  {
-    n: 5, year: "1986", tag: "COMPAQ DESKPRO 386", cn: "康柏 Deskpro 386",
-    shot: "hero", mem: 4194304,
-    ph: [255, 176, 64], accents: [[255, 72, 48], [186, 222, 255]],
-    az: 0.66, elev: 15, spin: 0.95, margin: 1.05,
-    build: buildDeskpro,
-    post: [
-      { raw: "POST 1986-09  COMPAQ DESKPRO 386 ................... COLD START" },
-      P("CPU", "CPU", "INTEL 80386DX @ 16.000 MHZ"),
-      P("MEM", "MEMORY", "0001024 KB -> 0004096 KB"),
-      P("BUS", "BUS", "32 BIT MEMORY / 16 BIT ISA"),
-      P("STORAGE", "STORAGE", '1.2 MB FDD + 40 MB HDD'),
-      P("VIDEO", "VIDEO", "VGA 640x480 / 16 COLOR"),
-      P("SOFTWARE", "SOFTWARE", "MS-DOS 3.2 / WINDOWS 1.0"),
-      P("PRICE", "PRICE", "USD 6499")
-    ],
-    cap: ["1986 · COMPAQ DESKPRO 386 · 康柏 Deskpro 386",
-          "第一台用第三方 CPU 打进 IBM 地盘的机器：32 位寻址把「640KB 够用」这句话彻底作废。"],
-    note: "FIRST 32-BIT PC"
-  },
-  {
-    n: 6, year: "1995", tag: "WINDOWS 95 PC", cn: "Windows 95 兼容机",
-    shot: "hero", mem: 16777216,
-    ph: [96, 232, 200], accents: [[255, 178, 50], [64, 255, 120], [96, 232, 200]],
-    az: 0.70, elev: 17, spin: 0.90, margin: 1.05,
-    build: buildWin95,
-    post: [
-      { raw: "POST 1995-08  WINDOWS 95 PC ...................... COLD START" },
-      P("CPU", "CPU", "INTEL PENTIUM @ 133 MHZ"),
-      P("MEM", "MEMORY", "00016384 KB EDO DRAM"),
-      P("BUS", "BUS", "PCI 2.1 / PLUG AND PLAY"),
-      P("STORAGE", "STORAGE", '1.6 GB HDD + 4x CD-ROM'),
-      P("VIDEO", "VIDEO", "SVGA 1024x768 / 256 COLOR"),
-      P("SOUND", "SOUND", "SOUND BLASTER 16"),
-      P("SOFTWARE", "SOFTWARE", "WINDOWS 95 OSR2"),
-      P("PRICE", "PRICE", "USD 2199")
-    ],
-    cap: ["1995 · WINDOWS 95 PC · Windows 95 兼容机",
-          "「开始」按钮 + 即插即用：图形界面把电脑从专业设备变成每个家庭都会用的家电。"],
-    note: "PLUG AND PLAY"
-  },
-  {
-    n: 7, year: "1998", tag: "IMAC G3", cn: "iMac G3",
-    shot: "crane", mem: 33554432,
-    ph: [122, 224, 255], accents: [[134, 232, 255], [232, 247, 252]],
-    az: 0.60, elev: 14, spin: 1.00, margin: 1.06,
-    build: buildiMac,
-    post: [
-      { raw: "POST 1998-08  IMAC G3 ............................ COLD START" },
-      P("CPU", "CPU", "POWERPC 750 G3 @ 233 MHZ"),
-      P("MEM", "MEMORY", "00032768 KB SDRAM"),
-      P("STORAGE", "STORAGE", "4 GB EIDE HARD DISK"),
-      P("VIDEO", "VIDEO", '15" CRT 1024x768 / MILLIONS'),
-      P("NET", "NETWORK", "10/100 BASE-T ETHERNET"),
-      P("PORT", "PORTS", "2x USB / NO FLOPPY / NO SCSI"),
-      P("SOFTWARE", "SOFTWARE", "MAC OS 8.1"),
-      P("PRICE", "PRICE", "USD 1299")
-    ],
-    cap: ["1998 · IMAC G3 · iMac G3",
-          "把主机塞进显示器、砍掉软驱、只留 USB：电脑第一次被当作「设计品」来卖，而不是当作设备。"],
-    note: "NO FLOPPY / USB ONLY"
-  },
-  {
-    n: 8, year: "2003", tag: "IBM THINKPAD T40", cn: "ThinkPad T40",
-    shot: "hero", mem: 268435456,
-    ph: [206, 212, 222], accents: [[126, 174, 220], [216, 48, 44]],
-    az: 0.66, elev: 24, spin: 0.85, margin: 1.06,
-    build: buildThinkPad,
-    post: [
-      { raw: "POST 2003-04  IBM THINKPAD T40 ................... COLD START" },
-      P("CPU", "CPU", "INTEL PENTIUM M @ 1.50 GHZ"),
-      P("MEM", "MEMORY", "0000512 KB DDR SDRAM"),
-      P("STORAGE", "STORAGE", "40 GB 4200 RPM HDD"),
-      P("VIDEO", "VIDEO", '14.1" TFT 1024x768'),
-      P("INPUT", "INPUT", "TRACKPOINT + TOUCHPAD"),
-      P("WEIGHT", "WEIGHT", "2.25 KG"),
-      P("SOFTWARE", "SOFTWARE", "WINDOWS XP PROFESSIONAL"),
-      P("PRICE", "PRICE", "USD 1699")
-    ],
-    cap: ["2003 · IBM THINKPAD T40 · ThinkPad T40",
-          "全黑、方正、键盘正中一颗红点：这套设计语言定了商务本二十年，也是无数人办公室里的第一台「自己的电脑」。"],
-    note: "THE BLACK BOX"
-  },
-  {
-    n: 9, year: "2007", tag: "ASUS EEE PC 701", cn: "华硕易 PC",
-    shot: "hero", mem: 536870912,
-    ph: [236, 232, 222], accents: [[178, 218, 250], [206, 202, 194]],
-    az: 0.62, elev: 22, spin: 0.92, margin: 1.06,
-    build: buildEeePC,
-    post: [
-      { raw: "POST 2007-10  ASUS EEE PC 701 ................... COLD START" },
-      P("CPU", "CPU", "INTEL CELERON M @ 900 MHZ"),
-      P("MEM", "MEMORY", "0000512 KB DDR2"),
-      P("STORAGE", "STORAGE", "4 GB SSD (NO MOVING PARTS)"),
-      P("VIDEO", "VIDEO", '7" 800x480 / VGA OUT'),
-      P("NET", "NETWORK", "WIFI 802.11G / 10-100 LAN"),
-      P("WEIGHT", "WEIGHT", "0.92 KG"),
-      P("SOFTWARE", "SOFTWARE", "XANDROS LINUX"),
-      P("PRICE", "PRICE", "USD 299")
-    ],
-    cap: ["2007 · ASUS EEE PC 701 · 华硕易 PC",
-          "299 美元的 7 英寸小本：能上网、能打字、能塞进包里。上网本三年卖了一亿多台，然后被平板电脑一夜抹平。"],
-    note: "USD 299 / 7-INCH"
-  },
-  {
-    n: 10, year: "2010", tag: "IPAD", cn: "iPad",
-    shot: "hero", mem: 268435456,
-    ph: [236, 240, 248], accents: [[164, 218, 255], [214, 219, 224]],
-    az: 0.60, elev: 15, spin: 1.05, margin: 1.07,
-    build: buildiPad,
-    post: [
-      { raw: "POST 2010-04  IPAD .............................. COLD START" },
-      P("CPU", "CPU", "APPLE A4 @ 1.000 GHZ"),
-      P("MEM", "MEMORY", "0000256 KB LPDDR"),
-      P("STORAGE", "STORAGE", "16 GB NAND FLASH"),
-      P("VIDEO", "VIDEO", '9.7" IPS 1024x768'),
-      P("INPUT", "INPUT", "MULTI-TOUCH / NO KEYBOARD"),
-      P("BATTERY", "BATTERY", "10 HOURS"),
-      P("OS", "SOFTWARE", "IPHONE OS 3.2"),
-      P("PRICE", "PRICE", "USD 499")
-    ],
-    cap: ["2010 · IPAD · iPad",
-          "没有键盘、没有鼠标、没有文件系统：对绝大多数人来说，「个人电脑」这个词从此不再等于一台台式机。"],
-    note: "POST-PC"
-  },
-  {
-    n: 11, year: "2012", tag: "RASPBERRY PI", cn: "树莓派",
-    shot: "hero", mem: 268435456,
-    ph: [120, 240, 150], accents: [[255, 84, 60], [214, 174, 68]],
-    az: 0.80, elev: 26, spin: 1.05, margin: 1.07,
-    build: buildPi,
-    post: [
-      { raw: "POST 2012-02  RASPBERRY PI ...................... COLD START" },
-      P("CPU", "CPU", "ARM1176JZF-S @ 700 MHZ"),
-      P("MEM", "MEMORY", "0000256 KB SDRAM"),
-      P("STORAGE", "STORAGE", "SD CARD (NO ONBOARD)"),
-      P("VIDEO", "VIDEO", "HDMI 1080P / COMPOSITE"),
-      P("GPIO", "GPIO", "26 PIN HEADER / I2C / SPI"),
-      P("POWER", "POWER", "5V MICRO-USB / 3.5 W"),
-      P("OS", "SOFTWARE", "RASPBIAN (LINUX)"),
-      P("PRICE", "PRICE", "USD 35")
-    ],
-    cap: ["2012 · RASPBERRY PI · 树莓派",
-          "35 美元的裸板电脑：整机只有信用卡大小，却把「可编程的机器」重新发给了全世界的教室。"],
-    note: "USD 35 / CREDIT-CARD SIZE"
-  },
-  {
-    n: 12, year: "2016", tag: "GAMING LAPTOP", cn: "游戏本",
-    shot: "orbit", mem: 17179869184,
-    ph: [214, 120, 255], accents: [[255, 74, 114], [84, 230, 255], [134, 220, 255]],
-    az: 0.62, elev: 24, spin: 0.85, margin: 1.06,
-    build: buildGaming,
-    post: [
-      { raw: "POST 2016-08  GAMING LAPTOP ..................... COLD START" },
-      P("CPU", "CPU", "INTEL CORE I7-6700HQ"),
-      P("GPU", "GRAPHICS", "NVIDIA GTX 1060 / 6 GB"),
-      P("MEM", "MEMORY", "00016384 KB DDR4"),
-      P("STORAGE", "STORAGE", "256 GB SSD + 1 TB HDD"),
-      P("VIDEO", "VIDEO", '15.6" 1920x1080 / 120 HZ'),
-      P("COOLING", "COOLING", "DUAL FAN / 4 HEATPIPE"),
-      P("WEIGHT", "WEIGHT", "2.60 KG"),
-      P("PRICE", "PRICE", "USD 1499")
-    ],
-    cap: ["2016 · GAMING LAPTOP · 游戏本",
-          "同一条路线在这里分岔：一边越做越薄，一边越做越厚 —— 双风扇、侧出风、RGB 键列，把台式机的性能塞进背包。"],
-    note: "DUAL FAN / 120 HZ"
-  },
-  {
-    n: 13, year: "2020", tag: "MAC MINI M1", cn: "Mac mini M1",
-    shot: "crane", mem: 8589934592,
-    ph: [200, 224, 255], accents: [[160, 200, 240], [242, 246, 255]],
-    az: 0.66, elev: 26, spin: 0.80, margin: 1.05,
-    build: buildMacMini,
-    post: [
-      { raw: "POST 2020-11  MAC MINI M1 ....................... COLD START" },
-      P("CPU", "CPU", "APPLE M1 8-CORE @ 3.2 GHZ"),
-      P("GPU", "GRAPHICS", "8-CORE INTEGRATED"),
-      P("MEM", "MEMORY", "0008192 KB UNIFIED"),
-      P("STORAGE", "STORAGE", "256 GB NVMe SSD"),
-      P("NPU", "NEURAL", "16-CORE / 11 TOPS"),
-      P("POWER", "POWER", "39 W MAX"),
-      P("WEIGHT", "WEIGHT", "1.20 KG"),
-      P("PRICE", "PRICE", "USD 699")
-    ],
-    cap: ["2020 · MAC MINI M1 · Mac mini M1",
-          "CPU、GPU、内存、神经引擎焊进同一块芯片：主板消失了，整台电脑缩成 19.7 厘米见方、3.6 厘米高的铝盒子。"],
-    note: "SoC / 3.6 CM TALL"
-  },
-  {
-    n: 14, year: "2026", tag: "AI PC", cn: "AI 个人电脑",
-    shot: "dolly", mem: 68719476736,
-    ph: [220, 140, 255], accents: [[85, 226, 255], [192, 108, 255]],
-    az: 0.62, elev: 26, spin: 0.85, margin: 1.06,
-    build: buildAIPC,
-    post: [
-      { raw: "POST 2026-01  AI PC ............................. COLD START" },
-      P("CPU", "CPU", "24-CORE HYBRID + NPU 45 TOPS"),
-      P("MEM", "MEMORY", "00065536 KB LPDDR5X"),
-      P("STORAGE", "STORAGE", "2 TB PCIE 5.0 NVMe"),
-      P("MODEL", "LOCAL MODEL", "70B PARAMS / 4-BIT"),
-      P("TOPS", "INFERENCE", "120 TOKENS PER SECOND"),
-      P("PRIVACY", "PRIVACY", "ON-DEVICE / NO CLOUD"),
-      P("POWER", "POWER", "18 W TYPICAL"),
-      P("PRICE", "PRICE", "USD 1499")
-    ],
-    cap: ["2026 · AI PC · AI 个人电脑",
-          "模型跑在自己机器上：算力重新回到个人手里，就像 1975 年那台机器把计算从机房搬回来一样。"],
-    note: "LOCAL INFERENCE"
+/* ─────────────────────────── 3. 新增 9 台机型建模（单位≈厘米） ─────────────────────────── */
+
+/* 1977 · Commodore PET 2001 —— 屏幕、键盘、卡带机装进一个壳 */
+function buildPet(g) {
+  mkBox(g, { w: 41, h: 13.5, d: 42, y: 6.8, c: D.petCase });
+  mkBox(g, { w: 41.3, h: .9, d: 42.3, y: 13.45, c: D.petSeam });          // 压边
+  /* 显示器：机身后半截长高出来的一块 */
+  mkBox(g, { w: 39, h: 21, d: 21, y: 24.4, z: -11, c: D.petCase });
+  mkBox(g, { w: 35.4, h: 18.6, d: 1.6, y: 24.4, z: -.1, c: D.petDark });
+  mkBox(g, { w: 30.5, h: 15.4, d: .9, y: 24.4, z: .9, c: D.petScreenBg });
+  mkBox(g, { w: 28.6, h: 13.8, d: .5, y: 24.4, z: 1.5, c: D.petScreen, acc: 1 });
+  /* 内置卡带机：面板右下 */
+  mkBox(g, { w: 10.8, h: 8.6, d: 1.8, x: 14.4, y: 7.0, z: 21.1, c: D.petDark });
+  mkBox(g, { w: 8.2, h: 1.1, d: 2.2, x: 14.4, y: 8.4, z: 21.6, c: D.petSlot });
+  mkBox(g, { w: 2.2, h: 2.2, d: 1.4, x: 18.2, y: 5.0, z: 21.2, c: D.petChip });
+  /* 巧克力键：4 排 + 一排空格，靠密度分辨 */
+  const kb = mkGroup(g, 0, 13.4, 8.5, -0.10);
+  mkBox(kb, { w: 36.4, h: 2.4, d: 15.4, c: D.petCase });
+  mkBox(kb, { w: 34.6, h: .8, d: 13.4, y: 1.3, c: D.petDark });
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 10; c++)
+      mkBox(kb, { w: 2.7, h: 1.1, d: 2.5, x: -14.9 + c * 3.3, y: 1.95, z: -4.8 + r * 3.4, c: D.petKey });
+  for (let c = 0; c < 8; c++)
+    mkBox(kb, { w: 2.7, h: 1.1, d: 2.5, x: -7.7 + c * 3.3, y: 1.95, z: 8.3, c: D.petKey });
+}
+
+/* 1984 · Macintosh 128K —— 立起来的一体机 + 鼠标 */
+function buildMac128(g) {
+  mkBox(g, { w: 24.6, h: 34.5, d: 27.4, y: 17.3, c: D.macCase });
+  mkBox(g, { w: 25.0, h: .8, d: 27.8, y: 34.4, c: D.macDark });            // 顶盖压边
+  mkBox(g, { w: 21.8, h: 16.6, d: 1.4, y: 24.0, z: 13.4, c: D.macBezel }); // 9" 屏框
+  mkBox(g, { w: 18.2, h: 13.4, d: .8, y: 24.0, z: 14.3, c: D.macScreen });
+  mkBox(g, { w: 16.4, h: 11.6, d: .4, y: 24.0, z: 14.75, c: D.macScreenHi, acc: 1 });
+  /* 软驱缝 + 苹果标 */
+  mkBox(g, { w: 12.6, h: 1.5, d: 1.2, x: 2.4, y: 12.6, z: 13.9, c: D.macSlot });
+  mkBox(g, { w: 3.2, h: 1.0, d: .8, x: 2.4, y: 12.6, z: 14.4, c: D.macDark });
+  mkBox(g, { w: 2.6, h: 2.6, d: 1.0, x: -9.4, y: 12.6, z: 13.9, c: D.macKey });
+  for (let i = 0; i < 3; i++)                                               // 底部进风
+    mkBox(g, { w: 16, h: .6, d: .9, y: 6.4 - i * 1.5, z: 13.7, c: D.macSlot });
+  /* 键盘 + 单键鼠标 */
+  mkBox(g, { w: 33, h: 2.6, d: 13.5, y: 1.4, z: 27, c: D.macKey });
+  mkBox(g, { w: 31, h: .8, d: 11.6, y: 2.45, z: 26.8, c: D.macDark });
+  for (let r = 0; r < 4; r++)
+    mkBox(g, { w: 29.2, h: 1.0, d: 2.1, y: 2.9, z: 22.6 + r * 2.6, c: D.macKeyHi });
+  mkBox(g, { w: 5.2, h: 1.9, d: 8.6, x: 21.6, y: 1.2, z: 28.5, c: D.macKey });
+  mkBox(g, { w: 5.4, h: .6, d: 1.6, x: 21.6, y: 1.9, z: 33.0, c: D.macDark });
+}
+
+/* 1985 · 长城 0520C-H —— 国产兼容机 + 中文 CCDOS */
+function buildGreatWall(g) {
+  mkBox(g, { w: 50, h: 14, d: 43, y: 7.2, c: D.gwCase });
+  mkBox(g, { w: 50.4, h: 1.0, d: 43.4, y: 13.65, c: D.gwSeam });
+  mkBox(g, { w: 47.6, h: 12.4, d: 1.4, y: 7.2, z: 21.9, c: D.gwBezel });
+  /* 三块驱动位横排：国产机箱的典型面板 */
+  for (let i = 0; i < 2; i++) {
+    mkBox(g, { w: 14.4, h: 6.2, d: 1.8, x: -15.4 + i * 16.2, y: 8.6, z: 22.3, c: D.gwDark });
+    mkBox(g, { w: 10.2, h: 1.2, d: 2.2, x: -15.4 + i * 16.2, y: 9.9, z: 22.75, c: D.gwSlot });
   }
+  mkBox(g, { w: 11, h: 3.2, d: 1.8, x: 16.2, y: 5.2, z: 22.3, c: D.gwDark });
+  mkBox(g, { w: 8.2, h: .9, d: 2.2, x: 16.2, y: 5.6, z: 22.75, c: D.gwSlot });
+  /* 「长城」铭牌 + 电源键 + 指示灯 */
+  mkBox(g, { w: 6.4, h: 2.0, d: .8, x: -17.5, y: 4.4, z: 22.6, c: D.gwRed });
+  mkBox(g, { w: 3.4, h: 3.0, d: 1.6, x: 20.4, y: 10.4, z: 22.4, c: D.gwDark });
+  mkBox(g, { w: 1.5, h: 1.5, d: 1.2, x: 15.4, y: 10.4, z: 22.5, c: D.gwLed, acc: 1 });
+  /* 12" 绿显：机顶 + 遮光罩 + 可倾底座 */
+  const crt = mkGroup(g, 0, 14.6, -1);
+  mkBox(crt, { w: 36, h: 29, d: 34, y: 14.5, c: D.gwCase });
+  mkBox(crt, { w: 32.4, h: 24.4, d: 2.0, y: 15.6, z: 16.4, c: D.gwBezel });
+  mkBox(crt, { w: 28.4, h: 21.2, d: 1.0, y: 15.6, z: 17.6, c: D.crtDark });
+  mkBox(crt, { w: 26.2, h: 19.2, d: .5, y: 15.6, z: 18.25, c: D.gwScreen, acc: 2 });
+  mkBox(crt, { w: 37, h: 1.8, d: 35, y: 29.5, c: D.gwSeam });               // 顶部提手线
+  mkBox(crt, { w: 28, h: 2.6, d: 7, y: 1.2, z: 11, c: D.gwDark });          // 底座
+  /* 101 键：主区 + 数字区 */
+  mkBox(g, { w: 49, h: 3.2, d: 18, y: 1.7, z: 33.5, c: D.gwCase });
+  mkBox(g, { w: 46, h: .9, d: 15.6, y: 3.1, z: 32.9, c: D.gwDark });
+  for (let r = 0; r < 6; r++)
+    mkBox(g, { w: r < 5 ? 44 : 22, h: 1.3, d: 2.5, x: r < 5 ? -1.6 : 9.6,
+               y: 3.75, z: 26.2 + r * 2.95, c: D.gwKey });
+}
+
+/* 1987 · IBM PS/2 Model 80 —— 塔式 + 微通道总线 */
+function buildPS2(g) {
+  mkBox(g, { w: 21, h: 46, d: 42, y: 23, c: D.ps2Case });
+  mkBox(g, { w: 21.4, h: 1.2, d: 42.4, y: 46.3, c: D.ps2Bezel });
+  mkBox(g, { w: 19, h: 44, d: 1.6, y: 23, z: 21.2, c: D.ps2Bezel });
+  mkBox(g, { w: 16.4, h: 40.6, d: .5, y: 23, z: 22.05, c: D.ps2Dark });
+  /* 3.5" 软驱 + 5.25" 位 + 电源键 */
+  mkBox(g, { w: 13, h: 3.8, d: 1.8, y: 37.6, z: 22.3, c: D.ps2Dark });
+  mkBox(g, { w: 9.4, h: 1.1, d: 2.2, y: 37.9, z: 22.75, c: D.ps2Slot });
+  mkBox(g, { w: 13, h: 5.4, d: 1.8, y: 30.8, z: 22.3, c: D.ps2Dark });
+  mkBox(g, { w: 9.4, h: 1.2, d: 2.2, y: 32.0, z: 22.75, c: D.ps2Slot });
+  mkBox(g, { w: 4.6, h: 3.2, d: 1.6, y: 18.4, z: 22.3, c: D.ps2Blue });
+  mkBox(g, { w: 1.5, h: 1.5, d: 1.2, x: 4.8, y: 18.4, z: 22.4, c: D.ps2Led, acc: 0 });
+  /* 蓝色竖徽标 + 侧向散热格栅 */
+  mkBox(g, { w: 2.0, h: 11.6, d: .8, x: -6.2, y: 44, z: 22.05, c: D.ps2Blue });
+  for (let i = 0; i < 6; i++)
+    mkBox(g, { w: 14, h: .6, d: .9, y: 12.4 + i * 1.5, z: 22.05, c: D.ps2Slot });
+  /* 键盘 + 方口鼠标 */
+  mkBox(g, { w: 46, h: 3.2, d: 17.5, y: 1.8, z: 32, c: D.ps2Case });
+  mkBox(g, { w: 43, h: .9, d: 15.2, y: 3.1, z: 31.4, c: D.ps2Dark });
+  for (let r = 0; r < 6; r++)
+    mkBox(g, { w: r < 5 ? 41 : 20, h: 1.25, d: 2.4, x: r < 5 ? 0 : 10.5,
+               y: 3.7, z: 24.6 + r * 2.95, c: D.ps2Key });
+  mkBox(g, { w: 5.4, h: 2.0, d: 8.2, x: 25, y: 1.3, z: 33, c: D.ps2Case });
+}
+
+/* 1990 · NeXTcube —— 30.5cm 的黑色立方体，万维网在这里出生 */
+function buildNeXT(g) {
+  const S2 = 30.5;
+  mkBox(g, { w: S2, h: S2, d: S2, y: S2 / 2, c: D.nxCube });
+  /* 棱线：纯黑立方体在点云里会糊成一团，必须用略亮的细条勾出轮廓 */
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    mkBox(g, { w: .55, h: S2, d: .55, x: sx * S2 / 2, y: S2 / 2, z: sz * S2 / 2, c: D.nxEdge });
+  mkBox(g, { w: S2 + .2, h: .5, d: S2 + .2, y: S2 - .1, c: D.nxEdge });     // 顶面倒角
+  mkBox(g, { w: S2 + .1, h: .6, d: S2 + .1, y: .3, c: D.nxEdge });          // 底面
+  /* 前面板上唯一的开口：光驱缝 */
+  mkBox(g, { w: 12.4, h: 1.3, d: .8, x: 0, y: 24.6, z: S2 / 2 + .2, c: 0x050506 });
+  /* 17" 单色显示器直接架在 cube 上 */
+  mkBox(g, { w: 40, h: 37, d: 37, y: 49, c: D.nxCube });
+  mkBox(g, { w: 41, h: 38, d: 37.6, y: 49, z: -1.4, c: 0x101013 });        // 后壳倒角
+  mkBox(g, { w: 35.6, h: 29.6, d: 2.2, y: 50.2, z: 18.4, c: D.nxBezel });
+  mkBox(g, { w: 31.6, h: 25.6, d: 1.0, y: 50.2, z: 19.6, c: D.nxScreen, acc: 1 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    mkBox(g, { w: .5, h: 37, d: .5, x: sx * 20, y: 49, z: sz * 18.5 + (-1.4), c: D.nxEdge });
+  /* 键盘 + 鼠标 */
+  mkBox(g, { w: 42, h: 2.8, d: 16, y: 1.5, z: 30, c: D.nxKey });
+  mkBox(g, { w: 40, h: .8, d: 14, y: 2.6, z: 29.6, c: 0x0a0a0c });
+  for (let r = 0; r < 5; r++)
+    mkBox(g, { w: 38, h: 1.0, d: 2.2, y: 3.0, z: 25.0 + r * 2.7, c: 0x2c2c31 });
+  mkBox(g, { w: 5.6, h: 2.1, d: 8.4, x: 25, y: 1.3, z: 31, c: D.nxKey });
+}
+
+/* 1996 · 联想 奔腾多媒体机 —— 塔 + CRT + 一对塑料音箱 */
+function buildLegend(g) {
+  mkBox(g, { w: 21, h: 42, d: 44, y: 21, c: D.lgCase });
+  mkBox(g, { w: 21.4, h: 1.2, d: 44.4, y: 42.3, c: D.lgBezel });
+  mkBox(g, { w: 19, h: 40.4, d: 1.4, y: 21, z: 22.3, c: D.lgBezel });
+  mkBox(g, { w: 16.4, h: 36.6, d: .5, y: 21, z: 23.05, c: D.lgDark });
+  for (let i = 0; i < 3; i++) {                                             // 三块 5.25" 位
+    mkBox(g, { w: 14.6, h: 4.0, d: 1.6, y: 35.2 - i * 6.0, z: 23.3, c: D.lgDark });
+    mkBox(g, { w: 10.4, h: 1.0, d: 2.0, y: 36.0 - i * 6.0, z: 23.7, c: 0x08090a });
+  }
+  mkBox(g, { w: 4.6, h: 3.4, d: 1.6, y: 14.6, z: 23.3, c: D.lgDark });      // 电源键
+  mkBox(g, { w: 1.5, h: 1.5, d: 1.1, y: 14.6, z: 23.5, c: D.lgLed, acc: 1 });
+  for (let i = 0; i < 4; i++)                                               // 进风栅
+    mkBox(g, { w: 13, h: .6, d: .9, y: 8.0 + i * 1.4, z: 23.05, c: 0x08090a });
+  /* 15" CRT 架在塔顶 */
+  mkBox(g, { w: 36, h: 31, d: 39, y: 58.5, z: -1, c: D.lgCase });
+  mkBox(g, { w: 32.6, h: 26.4, d: 1.8, y: 58.5, z: 18.6, c: D.lgDark });
+  mkBox(g, { w: 28.6, h: 22.4, d: 1.0, y: 58.5, z: 19.7, c: D.crtDark });
+  mkBox(g, { w: 26.6, h: 20.4, d: .5, y: 58.5, z: 20.35, c: D.lgScreen, acc: 2 });
+  /* 一对音箱：1996 年「多媒体电脑」的标志 */
+  for (const sx of [-1, 1]) {
+    mkBox(g, { w: 8.4, h: 17, d: 9.4, x: sx * 29, y: 8.6, z: 8, c: D.lgSpeaker });
+    mkBox(g, { w: 6.6, h: 6.2, d: 1.0, x: sx * 29, y: 12.0, z: 12.6, c: 0x191712 });
+    mkBox(g, { w: 4.4, h: 4.0, d: .8, x: sx * 29, y: 4.6, z: 12.6, c: 0x191712 });
+    mkBox(g, { w: 8.6, h: .5, d: 9.6, x: sx * 29, y: 17.1, z: 8, c: D.lgBezel });
+  }
+  /* 键盘 */
+  mkBox(g, { w: 46, h: 3.2, d: 18, y: 1.8, z: 34, c: D.lgCase });
+  mkBox(g, { w: 43, h: .9, d: 15.6, y: 3.1, z: 33.4, c: D.lgDark });
+  for (let r = 0; r < 6; r++)
+    mkBox(g, { w: r < 5 ? 41 : 20, h: 1.25, d: 2.5, x: r < 5 ? -1.4 : 9,
+               y: 3.75, z: 26.6 + r * 2.95, c: D.lgKey });
+}
+
+/* 2020 · 鲲鹏 / 统信 UOS 信创整机 —— 全黑纤薄塔 + 窄边显示器 */
+function buildKunpeng(g) {
+  mkBox(g, { w: 17, h: 38, d: 40, x: -30, y: 19, c: D.kpCase });
+  mkBox(g, { w: 17.4, h: .8, d: 40.4, x: -30, y: 37.9, c: D.kpAlu });
+  mkBox(g, { w: 15.4, h: 36.2, d: 1.2, x: -30, y: 19, z: 20.1, c: D.kpDark });
+  mkBox(g, { w: 13.6, h: 8.6, d: .6, x: -30, y: 19, z: 20.9, c: D.kpBezel });   // 前面板网孔
+  for (let i = 0; i < 6; i++)
+    mkBox(g, { w: 12.4, h: .5, d: .7, x: -30, y: 15.4 + i * 1.4, z: 21.0, c: 0x0a0c0e });
+  mkBox(g, { w: 2.2, h: 2.2, d: 1.2, x: -30, y: 34.4, z: 20.8, c: D.kpAlu });  // 电源键
+  mkBox(g, { w: 1.3, h: 1.3, d: 1.1, x: -33.4, y: 34.4, z: 20.9, c: D.kpRed, acc: 1 });
+  /* 23.8" 窄边显示器：薄板 + 立柱 + 底盘 */
+  mkBox(g, { w: 54, h: 31, d: 2.2, x: 4, y: 44, c: D.kpBezel });
+  mkBox(g, { w: 52.4, h: 29.4, d: .6, x: 4, y: 44.1, z: 1.3, c: D.kpScreen, acc: 2 });
+  mkBox(g, { w: 5.4, h: 26, d: 4.4, x: 4, y: 15, z: -4, c: D.kpAlu });       // 立柱
+  mkBox(g, { w: 24, h: 1.4, d: 16, x: 4, y: .7, z: -2, c: D.kpCase });       // 底盘
+  /* 键鼠 */
+  mkBox(g, { w: 44, h: 2.4, d: 14, x: 2, y: 1.3, z: 30, c: D.kpCase });
+  for (let r = 0; r < 4; r++)
+    mkBox(g, { w: 41, h: .7, d: 2.6, x: 2, y: 2.6, z: 25.8 + r * 2.7, c: D.kpDark });
+  mkBox(g, { w: 5.4, h: 2.2, d: 8.6, x: 27, y: 1.2, z: 31, c: D.kpDark });
+}
+
+/* 2022 · Steam Deck —— 掌上电脑 */
+function buildSteam(g) {
+  const d = mkGroup(g, 0, 0, 0, -0.20);      // 略后仰，像立在展架上
+  mkBox(d, { w: 29.8, h: 11.7, d: 4.9, y: 5.85, c: D.sdBody });
+  mkBox(d, { w: 28.6, h: 10.7, d: .6, y: 5.85, z: 2.6, c: D.sdSlot });
+  mkBox(d, { w: 17.4, h: 10.2, d: .4, y: 5.9, z: 2.9, c: D.sdScreen, acc: 1 });
+  /* 两侧握把：两层台阶逼近圆润的手柄轮廓 */
+  for (const sx of [-1, 1]) {
+    mkBox(d, { w: 6.2, h: 12.4, d: 5.8, x: sx * 13.0, y: 5.6, c: D.sdGrip });
+    mkBox(d, { w: 4.4, h: 13.2, d: 4.2, x: sx * 14.6, y: 5.4, c: D.sdBody });
+    mkBox(d, { w: 5.6, h: 2.2, d: 2.2, x: sx * 12.4, y: 11.4, z: 1.4, c: D.sdGrip });  // 肩键
+    /* 摇杆 + 触控板 + 四键 */
+    mkBox(d, { w: 2.7, h: 2.7, d: 2.7, x: sx * 9.8, y: 8.9, z: 2.4, c: D.sdStick });
+    mkBox(d, { w: 3.6, h: 3.6, d: .5, x: sx * 9.8, y: 3.4, z: 2.7, c: D.sdGrip });
+    for (let i = 0; i < 4; i++)
+      mkBox(d, { w: 1.2, h: 1.2, d: .9, x: sx * 12.9 + (i % 2) * 1.6 - .8,
+                 y: 7.4 + ((i / 2) | 0) * 1.9, z: 2.6, c: D.sdBtn });
+  }
+  mkBox(d, { w: 6.0, h: .8, d: 1.2, y: 11.9, z: -.4, c: D.sdStrip || D.sdGrip });  // 顶部出风
+}
+
+/* 2024 · Apple Vision Pro —— 玻璃面罩 + 头带 */
+function buildVision(g) {
+  const h = mkGroup(g, 0, 0, 0, -0.06);
+  /* 前面板：铝合金边框 + 一整块深色玻璃 */
+  mkBox(h, { w: 20.4, h: 10.6, d: 1.6, y: 5.3, z: 2.4, c: D.vpAlu });
+  mkBox(h, { w: 19.0, h: 9.2, d: .5, y: 5.3, z: 3.3, c: D.vpGlass });
+  for (let i = 0; i < 3; i++)                                   // 玻璃反光带
+    mkBox(h, { w: 18.2 - i * .6, h: .5, d: .18, y: 8.4 - i * 1.8, z: 3.5, c: 0x3c414a });
+  /* 侧向包裹：两片铝，让面罩读得出弧度 */
+  for (const sx of [-1, 1]) {
+    mkBox(h, { w: 1.8, h: 10.2, d: 6.4, x: sx * 10.2, y: 5.3, z: -.8, c: D.vpAlu });
+    mkBox(h, { w: 5.6, h: 9.4, d: 1.2, x: sx * 8.4, y: 5.3, z: 2.9, c: D.vpGlass });
+  }
+  /* 主体 + 遮光罩（浅色织物） */
+  mkBox(h, { w: 17.8, h: 9.4, d: 5.6, y: 5.3, z: -.6, c: D.vpDark });
+  mkBox(h, { w: 16.6, h: 8.6, d: 2.6, y: 5.2, z: -4.4, c: D.vpSeal });
+  /* 头顶带 + 后带 */
+  for (const sx of [-1, 1])
+    mkBox(h, { w: 2.0, h: 1.5, d: 17, x: sx * 8.0, y: 9.4, z: -11.4, c: D.vpStrap });
+  mkBox(h, { w: 15.2, h: 1.5, d: 2.4, y: 9.6, z: -19.4, c: D.vpStrap });
+  /* 数码旋钮 + 侧键 */
+  mkBox(h, { w: 1.5, h: 1.5, d: 1.5, x: 10.4, y: 8.8, z: 1.0, c: D.vpAlu });
+  mkBox(h, { w: .9, h: 3.2, d: 1.0, x: 10.6, y: 5.8, z: 1.2, c: D.vpAlu });
+}
+
+/* ─────────────────────────── 4. 展厅与藏品 ─────────────────────────── */
+const HALLS = [
+  { id: 1, name: "起源", years: "1975 — 1977", note: "从一排开关和三十六盏灯开始" },
+  { id: 2, name: "标准", years: "1981 — 1986", note: "开放架构如何长成一片森林" },
+  { id: 3, name: "图形与网络", years: "1987 — 1996", note: "桌面盖住命令行的那十年" },
+  { id: 4, name: "便携与移动", years: "1998 — 2012", note: "从桌上搬到膝盖，再搬到手上" },
+  { id: 5, name: "异构计算", years: "2016 — 2026", note: "一颗芯片里的整台电脑" }
 ];
-STAGES.forEach(s => { s.post.forEach(e => { if (!e.text && e.raw) e.text = e.raw; }); });
 
-const PENDING = [];
-const TOTAL = 14;
-/* 年代轴用：全 14 代按年份铺开 */
-const TIMELINE = STAGES.map(s => s.year).concat(PENDING.map(p => p[1]));
+const EXHIBITS = [
+  { hall: 1, year: "1975", tag: "MITS ALTAIR 8800", cn: "阿尔泰 8800",
+    kicker: "1975 · 美国 新墨西哥 · 套件散件", mem: 256,
+    ph: [255, 152, 42], accents: [[255, 48, 24], [120, 120, 120]],
+    az: 0.62, elev: 13, spin: 1.00, margin: 1.06, build: buildAltair,
+    spec: [["CPU", "Intel 8080 @ 2 MHz"], ["内存", "256 字节"], ["面板", "25 个拨动开关 / 36 盏灯"],
+           ["存储", "纸带阅读机"], ["价格", "397 美元（散件）"]],
+    why: "《大众电子》1975 年 1 月号的封面把它放在正中间。它没有键盘、没有屏幕 —— 输入靠把面板上的开关一盏一盏拨对，输出靠看几盏灯。但它是第一台你买得起、也搬得回家的计算机。",
+    diff: "在它之前，「计算机」是一间机房，不是一件家具。" },
 
-/* 机器在扫描摆动范围内的真实投影尺寸：遍历所有盒子的角点，
-   比「包围盒宽高各自取最大」紧得多，取景才不会把机器缩得太小 */
-function projExtent(s) {
-  const e = s.elev * Math.PI / 180, rng = 0.50 * (s.spin || 1);
-  const se = Math.sin(e), ce = Math.cos(e), P = s.pts;
-  let bw = 0, bh = 0;
-  for (let k = -1.0; k <= 1.001; k += 0.1) {
-    const a = s.az + k * rng, ca = Math.cos(a), sa = Math.sin(a);
-    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-    for (let i = 0; i < P.length; i += 3) {
-      const x = P[i], y = P[i + 1], z = P[i + 2];
-      const px = x * ca - z * sa;                        // 屏幕右轴
-      const py = -x * se * sa + y * ce - z * se * ca;    // 屏幕上轴
-      if (px < x0) x0 = px; if (px > x1) x1 = px;
-      if (py < y0) y0 = py; if (py > y1) y1 = py;
-    }
-    if (x1 - x0 > bw) bw = x1 - x0;
-    if (y1 - y0 > bh) bh = y1 - y0;
-  }
-  return { w: bw, h: bh };
-}
-/* 按机器自身的长宽比决定 3D 画面区的高度（格数），再求相机距离 */
-function frameStage(s) {
-  const ex = projExtent(s);
-  s.AHs = Math.max(18, Math.min(M_ROWS - 4, Math.round(AW * MW / (MH * (ex.w / ex.h)))));
-  s.mY0 = M_Y0 + Math.round((M_ROWS - s.AHs) / 2);
-  const aspect = (AW * MW) / (s.AHs * MH);
-  s.dist = Math.max((ex.h / 2) / TAN_Y, (ex.w / 2) / (TAN_Y * aspect)) * s.margin;
-}
-function fitDist(s, aspect) {
-  const ex = projExtent(s);
-  return Math.max((ex.h / 2) / TAN_Y, (ex.w / 2) / (TAN_Y * aspect)) * s.margin;
-}
+  { hall: 1, year: "1977", tag: "APPLE ][", cn: "苹果二号",
+    kicker: "1977 · 美国 加州 · 一体成型", mem: 49152,
+    ph: [86, 255, 132], accents: [[86, 255, 140], [40, 40, 46]],
+    az: 0.55, elev: 17, spin: 1.15, margin: 1.06, build: buildApple2,
+    spec: [["CPU", "MOS 6502 @ 1.023 MHz"], ["内存", "4 KB → 48 KB"], ["显示", "彩色 NTSC 280×192"],
+           ["扩展", "8 条插槽 · 图纸全公开"], ["存储", "磁带机 / Disk ]["], ["价格", "1298 美元"]],
+    why: "沃兹尼亚克把整块主板压进一块塑料壳，还留了 8 条完全敞开的扩展槽。它是第一台真正「开箱就能用」的个人电脑，也是第一台能上彩色的。",
+    diff: "比 Altair 多了<b>键盘、彩色输出、8 条扩展槽</b>：从「自己焊一台」变成「买一台再改装」。" },
 
-STAGES.forEach(s => {
-  BOXES.length = 0; CORNERS.length = 0;
-  s.build(ROOT);
-  const fit = normalize(BOXES, CORNERS);
-  s.R = fit.R; s.Hh = fit.h;
-  s.wx = fit.wx; s.wy = fit.wy; s.wz = fit.wz; s.pts = fit.pts;
-  /* 采样间距双向收敛到固定点数预算（面积 ∝ 1/间距²）。
-     必须双向：树莓派只有 8.5cm 见方，单向「超了才缩」会让它只剩两千多个点，
-     细节全丢、右下角读数也不好看。固定点数 = 每台机器在屏幕上一样细。 */
-  let sp = SPACING, cl = null;
-  for (let k = 0; k < 4; k++) {
-    cl = sampleBoxes(BOXES, sp);
-    const n = cl.px.length;
-    if (n > CLOUD_BUDGET * 0.90 && n < CLOUD_BUDGET * 1.10) break;
-    sp *= Math.sqrt(n / CLOUD_BUDGET);
-  }
-  s.NP = cl.px.length;
-  s.nBoxes = BOXES.length;
-  s.cx3 = new Float32Array(cl.px); s.cy3 = new Float32Array(cl.py); s.cz3 = new Float32Array(cl.pz);
-  s.segs = cl.segs;
+  { hall: 1, year: "1977", tag: "COMMODORE PET 2001", cn: "康懋达 PET 2001",
+    kicker: "1977 · 美国 加州 · 一体机", mem: 8192,
+    ph: [180, 255, 150], accents: [[74, 223, 130], [156, 150, 134]],
+    az: 0.58, elev: 18, spin: 1.05, margin: 1.06, build: buildPet,
+    spec: [["CPU", "MOS 6502 @ 1 MHz"], ["内存", "8 KB"], ["显示", "9 英寸单显 40×25"],
+           ["输入", "巧克力键盘"], ["存储", "内置卡带机"], ["价格", "795 美元"]],
+    why: "屏幕、键盘、磁带机装进同一个壳子，插电就能用 —— 这是「个人电脑」第一次长成家电的样子。它比 Apple II 更早做到这一点。",
+    diff: "比 Apple II 少一点自由，多一台<b>内置显示器和磁带机</b>：不用再外接电视机。" },
+
+  { hall: 2, year: "1981", tag: "IBM PC 5150", cn: "IBM 个人电脑",
+    kicker: "1981 · 美国 佛罗里达 · 开放架构", mem: 655360,
+    ph: [64, 255, 108], accents: [[64, 255, 108], [64, 255, 108]],
+    az: 0.72, elev: 16, spin: 0.90, margin: 1.05, build: buildIBMPC,
+    spec: [["CPU", "Intel 8088 @ 4.77 MHz"], ["内存", "16 KB → 256 KB"], ["总线", "8 位 ISA · 规格公开"],
+           ["存储", '5.25" 软驱 ×2'], ["显示", "MDA 80×25 单色"], ["价格", "1565 美元"]],
+    why: "IBM 把总线、BIOS 和插槽的规格全部摊在桌面上，谁照着做都能兼容。十年后兼容机长成了一片森林，个人电脑由此有了「行业标准」。",
+    diff: "比 Apple II 多了<b>一份公开的蓝图</b>：从此买电脑不必买同一个牌子。" },
+
+  { hall: 2, year: "1982", tag: "COMMODORE 64", cn: "康懋达 64",
+    kicker: "1982 · 美国 宾州 · 家用机", mem: 65536,
+    ph: [150, 246, 255], accents: [[80, 215, 255], [74, 99, 232]],
+    az: 0.68, elev: 21, spin: 1.20, margin: 1.05, build: buildC64,
+    spec: [["CPU", "MOS 6510 @ 1.023 MHz"], ["内存", "64 KB"], ["图形", "VIC-II 320×200 / 16 色"],
+           ["声音", "SID 6581 / 3 声部"], ["销量", "约 1700 万台"], ["价格", "595 美元"]],
+    why: "SID 6581 是那个年代最好的声音芯片之一 —— 三路复音，能奏出后来整代游戏音乐。它是史上最畅销的单一电脑型号。",
+    diff: "比 IBM PC 便宜两倍多，还多一颗<b>会唱歌的芯片</b>：电脑从工具变成客厅里的家电。" },
+
+  { hall: 2, year: "1984", tag: "MACINTOSH 128K", cn: "麦金塔",
+    kicker: "1984 · 美国 加州 · 一体机", mem: 131072,
+    ph: [214, 226, 206], accents: [[215, 222, 212], [26, 24, 19]],
+    az: 0.62, elev: 17, spin: 0.98, margin: 1.05, build: buildMac128,
+    spec: [["CPU", "Motorola 68000 @ 7.83 MHz"], ["内存", "128 KB"], ["显示", "9 英寸 512×342 单色"],
+           ["输入", "鼠标 + 图形界面"], ["存储", '3.5" 400 KB 软驱'], ["价格", "2495 美元"]],
+    why: "1 月 24 日发布。图标、窗口、鼠标，还有那支只播了一次的广告。它把「记住命令」变成了「指一下」—— 在此之前，电脑是要背手册的。",
+    diff: "比 IBM PC 多了<b>鼠标和图形界面</b>，少了<b>扩展槽</b>：第一次有人把「封闭」当成优点。" },
+
+  { hall: 2, year: "1985", tag: "长城 0520C-H", cn: "长城微型计算机",
+    kicker: "1985 · 中国 北京 · 国产兼容机", mem: 524288,
+    ph: [88, 255, 140], accents: [[192, 57, 43], [66, 224, 122]],
+    az: 0.70, elev: 16, spin: 0.92, margin: 1.05, build: buildGreatWall,
+    spec: [["CPU", "Intel 8088 @ 4.77 MHz"], ["内存", "512 KB"], ["显示", "12 英寸 绿显"],
+           ["系统", "CCDOS 中文磁盘系统"], ["存储", '双 5.25" 软驱 + 硬盘'], ["产地", "北京 · 中国"]],
+    why: "长城 0520 系列是国产微机里真正量产的一代：与 IBM PC 兼容，配上中文系统，让汉字第一次能在这类机器上正常排版、打印、进办公室。",
+    diff: "比 IBM PC 多了<b>中文</b>：一台只会拼英文的电脑，在中国是进不了办公室的。" },
+
+  { hall: 2, year: "1986", tag: "COMPAQ DESKPRO 386", cn: "康柏 Deskpro 386",
+    kicker: "1986 · 美国 德州 · 第一台 386", mem: 4194304,
+    ph: [255, 176, 64], accents: [[255, 72, 48], [186, 222, 255]],
+    az: 0.66, elev: 15, spin: 0.95, margin: 1.05, build: buildDeskpro,
+    spec: [["CPU", "Intel 80386DX @ 16 MHz"], ["内存", "1 MB → 4 MB"], ["总线", "32 位内存 / 16 位 ISA"],
+           ["显示", "VGA 640×480 / 16 色"], ["存储", "1.2 MB 软驱 + 40 MB 硬盘"], ["价格", "6499 美元"]],
+    why: "康柏抢在 IBM 之前用 80386 做出整机。它证明了一件事：CPU 不再由一家公司分配，谁先把新芯片装进机器，谁就赢。",
+    diff: "比 IBM PC 多了<b>32 位寻址</b>，把「640KB 够用」这句话当场作废。" },
+
+  { hall: 3, year: "1987", tag: "IBM PS/2 MODEL 80", cn: "PS/2 塔式机",
+    kicker: "1987 · 美国 纽约 · 塔式整机", mem: 2097152,
+    ph: [176, 200, 226], accents: [[68, 112, 168], [76, 255, 114]],
+    az: 0.62, elev: 18, spin: 0.88, margin: 1.05, build: buildPS2,
+    spec: [["CPU", "Intel 80386 @ 16 / 20 MHz"], ["内存", "1 MB → 16 MB"], ["总线", "微通道 MCA"],
+           ["显示", "VGA 640×480"], ["存储", '3.5" 1.44 MB 软驱'], ["接口", "PS/2 圆口键鼠"]],
+    why: "IBM 想用微通道总线把兼容机挡在门外，结果被兼容机阵营用 EISA 顶了回去。但它带来的 VGA 标准和 PS/2 接口，一直活到今天。",
+    diff: "比 386 兼容机多了<b>VGA 与 PS/2 接口</b>，也多了 IBM 第一次<b>收回开放架构的尝试</b> —— 并且失败了。" },
+
+  { hall: 3, year: "1990", tag: "NEXT CUBE", cn: "NeXT 立方体",
+    kicker: "1990 · 美国 加州 · 工作站", mem: 8388608,
+    ph: [200, 206, 218], accents: [[201, 207, 212], [83, 83, 92]],
+    az: 0.86, elev: 26, spin: 0.85, margin: 1.06, build: buildNeXT,
+    spec: [["CPU", "Motorola 68030 @ 25 MHz"], ["内存", "8 MB"], ["显示", "17 英寸 1120×832 灰度"],
+           ["机身", "30.5 cm 镁合金立方体"], ["存储", "光磁盘 / 硬盘"], ["价格", "9999 美元"]],
+    why: "一整块黑色镁合金，30.5 厘米见方，卖得并不好。但 1990 年，蒂姆·伯纳斯-李就是在这台机器上写出了第一个网页浏览器。",
+    diff: "比同期 PC 多了<b>整块金属机身</b>和一块 1120×832 的灰度屏：贵得离谱，却成了万维网的出生地。" },
+
+  { hall: 3, year: "1995", tag: "WINDOWS 95 PC", cn: "Windows 95 兼容机",
+    kicker: "1995 · 美国 华盛顿 · 兼容机", mem: 16777216,
+    ph: [96, 232, 200], accents: [[255, 178, 50], [64, 255, 120], [96, 232, 200]],
+    az: 0.70, elev: 17, spin: 0.90, margin: 1.05, build: buildWin95,
+    spec: [["CPU", "Intel Pentium @ 133 MHz"], ["内存", "16 MB EDO"], ["总线", "PCI 2.1 · 即插即用"],
+           ["存储", "1.6 GB 硬盘 + 4× 光驱"], ["显示", "SVGA 1024×768 / 256 色"], ["声音", "Sound Blaster 16"]],
+    why: "开始菜单、任务栏、即插即用。8 月 24 日发售那天，人们排队买的不再是硬件，而是一套让硬件变得像家电的软件。",
+    diff: "比 DOS 时代多了<b>图形桌面和即插即用</b>：装一块声卡不用再改跳线。" },
+
+  { hall: 3, year: "1996", tag: "LENOVO PENTIUM PC", cn: "联想 奔腾多媒体机",
+    kicker: "1996 · 中国 北京 · 家用整机", mem: 16777216,
+    ph: [180, 226, 255], accents: [[143, 208, 255], [76, 255, 114], [74, 70, 60]],
+    az: 0.68, elev: 16, spin: 0.90, margin: 1.06, build: buildLegend,
+    spec: [["CPU", "Intel Pentium @ 133 / 166 MHz"], ["内存", "16 MB EDO"], ["存储", "1.6 GB 硬盘 + 8× 光驱"],
+           ["多媒体", "一对塑料音箱"], ["显示", "15 英寸 CRT"], ["市场", "当年中国 PC 销量第一"]],
+    why: "这一年联想第一次超过 IBM，成为中国 PC 市场销量第一。多媒体电脑带着音箱和光驱进客厅，「学电脑」成了那几年最热的一门课。",
+    diff: "比 1995 年那台兼容机多了<b>一对音箱</b>：电脑开始被买回家看 VCD，而不只是打字。" },
+
+  { hall: 4, year: "1998", tag: "IMAC G3", cn: "邦迪蓝一体机",
+    kicker: "1998 · 美国 加州 · 一体机", mem: 33554432,
+    ph: [122, 224, 255], accents: [[134, 232, 255], [232, 247, 252]],
+    az: 0.60, elev: 14, spin: 1.00, margin: 1.06, build: buildiMac,
+    spec: [["CPU", "PowerPC G3 @ 233 MHz"], ["内存", "32 MB"], ["显示", "15 英寸 CRT 1024×768"],
+           ["接口", "2× USB · 无软驱 · 无 SCSI"], ["网络", "10/100 以太网"], ["价格", "1299 美元"]],
+    why: "主机塞进显示器、软驱扔进垃圾桶、只留两个 USB 口。邦迪蓝的半透明塑料壳，让电脑第一次被当作设计品摆在家里。",
+    diff: "比上一代少了<b>软驱、串口、SCSI</b>，多了<b>USB 和半透明外壳</b>：减法比加法更需要勇气。" },
+
+  { hall: 4, year: "2003", tag: "IBM THINKPAD T40", cn: "ThinkPad T40",
+    kicker: "2003 · 日本 大和 · 商务本", mem: 536870912,
+    ph: [206, 212, 222], accents: [[126, 174, 220], [216, 48, 44]],
+    az: 0.66, elev: 24, spin: 0.85, margin: 1.06, build: buildThinkPad,
+    spec: [["CPU", "Intel Pentium M @ 1.5 GHz"], ["内存", "512 MB DDR"], ["显示", '14.1" TFT 1024×768'],
+           ["输入", "红点指点杆 + 触控板"], ["重量", "2.25 kg"], ["价格", "1699 美元"]],
+    why: "全黑、方正、键盘正中一颗红点。这套设计语言活了二十年，而红点存在的理由只有一个：手不必离开键盘。",
+    diff: "比家用机多了<b>2.25 公斤的移动性</b>，和一颗专为效率准备的指点杆。" },
+
+  { hall: 4, year: "2007", tag: "ASUS EEE PC 701", cn: "华硕易 PC",
+    kicker: "2007 · 中国台湾 · 上网本", mem: 536870912,
+    ph: [236, 232, 222], accents: [[178, 218, 250], [206, 202, 194]],
+    az: 0.62, elev: 22, spin: 0.92, margin: 1.06, build: buildEeePC,
+    spec: [["CPU", "Intel Celeron M @ 900 MHz"], ["内存", "512 MB DDR2"], ['显示', '7" 800×480'],
+           ["存储", "4 GB 闪存（无机械件）"], ["重量", "0.92 kg"], ["价格", "299 美元"]],
+    why: "299 美元、7 英寸、4GB 闪存。能上网、能打字、能塞进包里。它三年卖出一亿多台，然后被平板电脑一夜抹平。",
+    diff: "比笔记本少了<b>性能、光驱、硬盘</b>，多了<b>一个谁都买得起的价格</b>。" },
+
+  { hall: 4, year: "2008", tag: "MACBOOK AIR", cn: "MacBook Air",
+    kicker: "2008 · 美国 加州 · 超薄本", mem: 2147483648,
+    ph: [196, 206, 218], accents: [[200, 206, 214], [20, 22, 26]],
+    az: 0.64, elev: 25, spin: 0.88, margin: 1.07, build: buildAir,
+    spec: [["CPU", "Intel Core 2 Duo @ 1.6 GHz"], ["内存", "2 GB"], ["显示", '13.3" 1280×800'],
+           ["机身", "最厚处 1.94 cm"], ["接口", "无光驱 · 无网口"], ["价格", "1799 美元"]],
+    why: "发布会在信封里把它抽出来。从这一年起，笔记本的竞争目标从「更快」变成了「更薄」—— 重量成了新的参数。",
+    diff: "比 ThinkPad 少了<b>光驱、网口、可拆电池</b>，把「够用」压进 1.36 公斤。" },
+
+  { hall: 4, year: "2010", tag: "IPAD", cn: "平板电脑",
+    kicker: "2010 · 美国 加州 · 平板", mem: 268435456,
+    ph: [236, 240, 248], accents: [[164, 218, 255], [214, 219, 224]],
+    az: 0.60, elev: 15, spin: 1.05, margin: 1.07, build: buildiPad,
+    spec: [["CPU", "Apple A4 @ 1 GHz"], ["内存", "256 MB"], ["显示", '9.7" IPS 1024×768'],
+           ["输入", "多点触控 · 无键盘"], ["续航", "10 小时"], ["价格", "499 美元"]],
+    why: "没有键盘、没有鼠标、没有文件系统。对绝大多数人来说，电脑从此就是一块玻璃：开机就在，划一下就用。",
+    diff: "比上网本少了<b>键盘和文件系统</b>，多了<b>十小时电池和一次触摸</b>。" },
+
+  { hall: 4, year: "2012", tag: "RASPBERRY PI", cn: "树莓派",
+    kicker: "2012 · 英国 剑桥 · 单板机", mem: 268435456,
+    ph: [120, 240, 150], accents: [[255, 84, 60], [214, 174, 68]],
+    az: 0.80, elev: 26, spin: 1.05, margin: 1.07, build: buildPi,
+    spec: [["CPU", "ARM11 @ 700 MHz"], ["内存", "256 MB"], ["显示", "HDMI 1080p"],
+           ["扩展", "26 针 GPIO / I2C / SPI"], ["供电", "5V micro-USB · 3.5 W"], ["价格", "35 美元"]],
+    why: "35 美元、信用卡大小的一块裸板。它本来只是为了让英国孩子重新学编程，结果长进了实验室、车库和工厂。",
+    diff: "比任何一台整机都少了<b>外壳、显示器、硬盘</b>，只留下可编程的那部分。" },
+
+  { hall: 5, year: "2016", tag: "GAMING LAPTOP", cn: "游戏本",
+    kicker: "2016 · 中国台湾 · 高性能笔记本", mem: 17179869184,
+    ph: [214, 120, 255], accents: [[255, 74, 114], [84, 230, 255], [134, 220, 255]],
+    az: 0.62, elev: 24, spin: 0.85, margin: 1.06, build: buildGaming,
+    spec: [["CPU", "Core i7-6700HQ"], ["显卡", "GTX 1060 / 6 GB"], ["内存", "16 GB DDR4"],
+           ["显示", '15.6" 1920×1080 / 120 Hz'], ["散热", "双风扇 / 四热管"], ["重量", "2.60 kg"]],
+    why: "同一条路线在这里分岔：一边越做越薄，一边越做越厚。双风扇、侧出风、120Hz —— 把台式机的散热装进背包。",
+    diff: "比超薄本多了<b>独立显卡、四热管、120Hz 屏</b>，代价是 2.6 公斤。" },
+
+  { hall: 5, year: "2020", tag: "MAC MINI M1", cn: "迷你主机",
+    kicker: "2020 · 美国 加州 · 迷你主机", mem: 8589934592,
+    ph: [200, 224, 255], accents: [[160, 200, 240], [242, 246, 255]],
+    az: 0.66, elev: 26, spin: 0.80, margin: 1.05, build: buildMacMini,
+    spec: [["SoC", "Apple M1 · 8 核"], ["内存", "8 GB 统一内存"], ["机身", "19.7 cm 见方 / 3.6 cm 高"],
+           ["功耗", "整机 39 W"], ["重量", "1.20 kg"], ["价格", "699 美元"]],
+    why: "CPU、GPU、内存、神经引擎焊进同一块芯片，主板消失了。整台电脑缩成 19.7 厘米见方的一个铝盒 —— 这不是变小，是架构换了一次。",
+    diff: "比同性能的台式机少了<b>主板、内存条、显卡</b>：零件不再是可以换的，而是被设计成一体。" },
+
+  { hall: 5, year: "2020", tag: "KUNPENG / UOS", cn: "鲲鹏 · 统信 UOS",
+    kicker: "2020 · 中国 深圳 · 信创整机", mem: 17179869184,
+    ph: [255, 150, 130], accents: [[201, 59, 47], [159, 216, 255], [90, 97, 105]],
+    az: 0.68, elev: 18, spin: 0.88, margin: 1.06, build: buildKunpeng,
+    spec: [["CPU", "鲲鹏 920 · ARM 架构"], ["内存", "16 GB DDR4"], ["系统", "统信 UOS（Linux）"],
+           ["显示", '23.8" 窄边 1920×1080'], ["形态", "纤薄塔式 + 立柱支架"], ["产地", "深圳 · 中国"]],
+    why: "ARM 架构的处理器配国产操作系统，从指令集到桌面环境整套替换。它未必更快，但它是另一条供应链的起点。",
+    diff: "比其他 PC 多了<b>另一套指令集和操作系统</b>：兼容不是唯一的活法。" },
+
+  { hall: 5, year: "2022", tag: "STEAM DECK", cn: "Steam Deck 掌机",
+    kicker: "2022 · 美国 华盛顿 · 掌上电脑", mem: 17179869184,
+    ph: [186, 198, 210], accents: [[96, 226, 255], [236, 240, 245]],
+    az: 0.34, elev: 19, spin: 0.95, margin: 1.06, build: buildSteam,
+    spec: [["SoC", "AMD APU · Zen 2 + RDNA 2"], ["内存", "16 GB LPDDR5"], ["显示", '7" 1280×800 触摸'],
+           ["存储", "256 GB NVMe"], ["重量", "669 g"], ["价格", "399 美元"]],
+    why: "一台掌上电脑：7 英寸屏、两只摇杆、一个完整的 Linux 桌面。它把「PC」从桌上拿走，放进了手里。",
+    diff: "比游戏本少了<b>键盘和 15 英寸屏</b>，多了<b>摇杆和 669 克的分量</b>。" },
+
+  { hall: 5, year: "2024", tag: "APPLE VISION PRO", cn: "Vision Pro",
+    kicker: "2024 · 美国 加州 · 空间计算", mem: 17179869184,
+    ph: [200, 214, 236], accents: [[179, 185, 193], [198, 200, 198]],
+    az: 0.72, elev: 22, spin: 0.92, margin: 1.06, build: buildVision,
+    spec: [["芯片", "M2 + R1 双芯片"], ["显示", "2300 万像素 micro-OLED"], ["输入", "眼神 + 手势 · 无手柄"],
+           ["机身", "一整块层压玻璃"], ["重量", "约 600 g"], ["价格", "3499 美元"]],
+    why: "2300 万像素塞进两只眼睛，用眼神和手指代替鼠标。它把屏幕从「一块玻璃」变成「一整个房间」。",
+    diff: "比所有前代都少了<b>屏幕本身</b>：显示不再是一块面板，而是你看到的整个空间。" },
+
+  { hall: 5, year: "2026", tag: "AI PC", cn: "AI 个人电脑",
+    kicker: "2026 · 概念机 · 本地推理", mem: 68719476736,
+    ph: [220, 140, 255], accents: [[85, 226, 255], [192, 108, 255]],
+    az: 0.62, elev: 26, spin: 0.85, margin: 1.06, build: buildAIPC,
+    spec: [["CPU", "24 核混合架构 + NPU 45 TOPS"], ["内存", "64 GB LPDDR5X"], ["存储", "2 TB PCIe 5.0"],
+           ["本地模型", "70B / 4-bit"], ["推理", "120 tokens/s"], ["隐私", "数据不出机器"]],
+    why: "模型跑在自己的机器上，数据不出门。算力重新回到个人手里 —— 这像不像 1975 年，那台机器把计算从机房搬回来的那一次？",
+    diff: "比 2020 年那台多了<b>一块 45 TOPS 的 NPU</b>：电脑第一次能自己说话。" }
+];
+
+/* 编号 / 展厅名 / 上一件 全部由数据推出来，避免手写一遍又对不上 */
+EXHIBITS.forEach((s, i) => {
+  s.i = i;
+  s.no = String(i + 1).padStart(2, "0");
+  s.hallName = HALLS[s.hall - 1].name;
 });
-STAGES.forEach(frameStage);
+const TOTAL = EXHIBITS.length;
 
 /* ─────────────────────────── 5. 字符图集 ─────────────────────────── */
 let atlas = null;
@@ -1109,9 +1461,9 @@ function phosColors(rgb, n) {
   }
   return out;
 }
-function buildAtlas(stage) {
-  const cols = phosColors(stage.ph, NPHOS);
-  for (let i = 0; i < 8; i++) cols.push(stage.accents[i] ? stage.accents[i].slice() : [255, 255, 255]);
+function buildAtlas(s) {
+  const cols = phosColors(s.ph, NPHOS);
+  for (let i = 0; i < 8; i++) cols.push(s.accents[i] ? s.accents[i].slice() : [255, 255, 255]);
   const c = document.createElement("canvas");
   c.width = NRAMP * MW; c.height = cols.length * MH;
   const g = c.getContext("2d");
@@ -1124,207 +1476,120 @@ function buildAtlas(stage) {
   atlas = c;
 }
 
-/* ─────────────────────────── 6. 文本绘制 ─────────────────────────── */
-function drawStr(row, col, str, color, size) {
-  ctx.font = (size || FSIZE) + "px " + FONT;
-  ctx.fillStyle = color;
-  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  const y = row * CH + CH * 0.76;
-  let x = col * CW;
-  for (const ch of str) {
-    if (x > W) break;
-    if (ch !== " ") ctx.fillText(ch, x, y);
-    x += charCells(ch) * CW;
-  }
-  return x;
-}
-function strCells(str) { let n = 0; for (const ch of str) n += charCells(ch); return n; }
-function cutByCells(str, n) {
-  let c = 0, out = "";
-  for (const ch of str) { const w = charCells(ch); if (c + w > n) break; out += ch; c += w; }
-  return out;
-}
-
-/* ─────────────────────────── 7. 状态机 ─────────────────────────── */
-const S = {
-  stage: 0, st: 0, playing: true, mono: true, sound: true, ended: false,
-  logDone: [], logIdx: 0, logChars: 0, tAcc: 0,
-  capChars: 0, capAcc: 0, flash: 0,
-  prev: -1, morph: 1            // 转场：上一镜索引 / 进度 0→1
-};
-const PRINT_T = 1.9, CPS = 82, LINE_PAUSE = 0.13, CAP_CPS = 34;
-let HOLD = false;   // 调试用：freeze 快进时不自动跳到下一镜
-
-/* ── 世代转场 ──
-   每台机器的点云都被收敛到同一个预算（见 CLOUD_BUDGET 的双向采样），
-   转场时让旧机沿径向炸散、新机从随机球壳收拢，两朵云共用一张深度缓冲，
-   于是「Altair 的拨动开关散成字节，重组成 Apple ][ 的键盘」。 */
-const MORPH_T = 1.15;                 // 转场时长（秒）
-/* 每点 4 个确定性随机数：溶解阈值 / 三个抖动量 */
-const RND = new Float32Array(4 * 110000);
-(function () {
-  let sd = 20260117;
-  for (let i = 0; i < RND.length; i++) {
-    sd = (Math.imul(sd, 1664525) + 1013904223) | 0;
-    RND[i] = (sd >>> 0) / 4294967296 - 0.5;
-  }
-})();
-
-/* ── 录片模式（?render=1）的两块状态 ──
-   RENDER_MODE 下页面不跑 rAF，由外部按固定 fps 调 __renderFrame() 确定性推进；
-   keyClick 不发声，只把每一次键击的「全局动画时间 + 随机参数」记进 CLICKS，
-   最后由 __renderAudio() 用 OfflineAudioContext 原样合成一条音轨。 */
-let RENDER_MODE = false;
-let rAcc = 0;                       // 录片模式下的动画时钟（秒）
-/* 片中有两处闪烁（POST 面板的回车块、结束卡的光标）原来读真实时钟；
-   录片时必须改读动画时钟，否则录出来是随机闪烁而不是 2Hz 呼吸。 */
-const nowMs = () => RENDER_MODE ? rAcc * 1000 : performance.now();
-const CLICKS = [];
-let lastClickAnimT = -1;
-function globalTime() {
-  let t = 0;
-  for (let i = 0; i < S.stage; i++) t += STAGES[i].dur;
-  return t + S.st;
-}
-function recordClick(power) {
-  const t = globalTime();
-  if (t - lastClickAnimT < (1 / 30) * (0.66 + Math.random() * 0.68)) return;
-  lastClickAnimT = t;
-  CLICKS.push([+t.toFixed(4), power === undefined ? 1 : power,
-               0.86 + Math.random() * 0.28,        // j：音高/滤波中心
-               1.0 + Math.random() * 0.5]);        // rate：噪声播放速率
-}
-
-const stageTypingTime = s => s.post.reduce((a, l) => a + l.text.length / CPS + LINE_PAUSE, 0);
-const stageCapTime = s => (strCells(s.cap[0]) + strCells(s.cap[1]) + 6) / CAP_CPS;
-STAGES.forEach(s => { s.dur = PRINT_T + 0.55 + stageTypingTime(s) + 0.35 + stageCapTime(s) + 2.1; });
-
-function resetStage(i, morph) {
-  const wasStage = S.stage;
-  S.prev = (morph !== false && i === wasStage + 1) ? wasStage : -1;
-  S.morph = S.prev >= 0 ? 0 : 1;
-  S.stage = i; S.st = 0; S.ended = false;
-  S.logDone = []; S.logIdx = 0; S.logChars = 0; S.tAcc = 0;
-  S.capChars = 0; S.capAcc = 0;
-  /* 转场时不要整块白闪，否则会把爆散/聚拢全盖住 */
-  S.flash = S.prev >= 0 ? 0.30 : 1;
-  buildAtlas(STAGES[i]);
-  if (S.sound) beep(700, .05, .03);
-}
-function advance(dt) {
-  if (S.ended || !S.playing) return;
-  const s = STAGES[S.stage];
-  S.st += dt;
-  S.flash = Math.max(0, S.flash - dt * 3.4);
-  if (S.morph < 1) {
-    S.morph = Math.min(1, S.morph + dt / MORPH_T);
-    if (S.morph >= 1) S.prev = -1;      // 转场结束，回到单云路径
-  }
-
-  const n = s.post.length;
-  if (S.logIdx < n) {
-    const line = s.post[S.logIdx].text;
-    if (S.logChars < line.length) {
-      S.tAcc += dt;
-      const per = 1 / CPS;
-      while (S.tAcc >= per && S.logChars < line.length) {
-        S.tAcc -= per; S.logChars++;
-        if (S.sound) keyClick(0.9);           // 每打一个字一声键击（内部有速率上限）
-      }
-    } else {
-      S.tAcc += dt;
-      if (S.tAcc >= LINE_PAUSE) { S.tAcc = 0; S.logDone.push(line); S.logIdx++; S.logChars = 0; }
+/* ─────────────────────────── 6. 展品入场（首访时才建点云） ───────────────────────────
+   24 件全部预建要 22 MB 的 Float32 与将近两秒的采样，而观众一次只看一件。
+   所以每件展品在第一次被走到时才建模、采样、取景，之后缓存。 */
+function projExtent(s) {
+  const e = s.elev * Math.PI / 180, rng = 0.50 * (s.spin || 1);
+  const se = Math.sin(e), ce = Math.cos(e), P = s.pts;
+  let bw = 0, bh = 0;
+  for (let k = -1.0; k <= 1.001; k += 0.1) {
+    const a = s.az + k * rng, ca = Math.cos(a), sa = Math.sin(a);
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let i = 0; i < P.length; i += 3) {
+      const x = P[i], y = P[i + 1], z = P[i + 2];
+      const px = x * ca - z * sa;
+      const py = -x * se * sa + y * ce - z * se * ca;
+      if (px < x0) x0 = px; if (px > x1) x1 = px;
+      if (py < y0) y0 = py; if (py > y1) y1 = py;
     }
+    if (x1 - x0 > bw) bw = x1 - x0;
+    if (y1 - y0 > bh) bh = y1 - y0;
   }
-  const capT0 = PRINT_T + 0.55 + stageTypingTime(s) + 0.35;
-  if (S.st > capT0) {
-    const total = strCells(s.cap[0]) + strCells(s.cap[1]) + 6;
-    S.capAcc += dt * CAP_CPS;
-    const prev = S.capChars;
-    S.capChars = Math.min(total, Math.floor(S.capAcc));
-    /* 字幕也是「一个字一个字打出来」的，同样配键击声 */
-    if (S.sound && S.capChars > prev) keyClick(1.0);
+  /* 再单独算一次「不摆动」时的包围盒中心：展品要按自己的轮廓居中，
+     而不是按画布居中 —— 否则带背带的头显、带软驱的 Apple II 都会偏到一边 */
+  const ca0 = Math.cos(s.az), sa0 = Math.sin(s.az);
+  let c0 = 1e9, c1 = -1e9, d0 = 1e9, d1 = -1e9;
+  for (let i = 0; i < P.length; i += 3) {
+    const x = P[i], y = P[i + 1], z = P[i + 2];
+    const px = x * ca0 - z * sa0;
+    const py = -x * se * sa0 + y * ce - z * se * ca0;
+    if (px < c0) c0 = px; if (px > c1) c1 = px;
+    if (py < d0) d0 = py; if (py > d1) d1 = py;
   }
-  if (S.st >= s.dur) {
-    if (S.ended || HOLD) { S.st = s.dur; }
-    else if (S.stage < STAGES.length - 1) resetStage(S.stage + 1);
-    else { S.ended = true; S.st = s.dur; }
-  }
+  return { w: bw, h: bh, cx: (c0 + c1) / 2, cy: (d0 + d1) / 2 };
 }
-function goto(i) { if (i >= 0 && i < STAGES.length) resetStage(i); }
+function ensure(s) {
+  if (s._built) return;
+  BOXES.length = 0; CORNERS.length = 0;
+  s.build(ROOT);
+  const fit = normalize(BOXES, CORNERS);
+  s.R = fit.R; s.Hh = fit.h; s.wy = fit.wy; s.pts = fit.pts;
+  /* 采样间距双向收敛到固定点数预算：不够就加密、超了就抽稀。
+     必须双向 —— 树莓派只有 8.5cm 见方，单向「超了才缩」会让它只剩两千个点。 */
+  let sp = SPACING, cl = null;
+  for (let k = 0; k < 4; k++) {
+    cl = sampleBoxes(BOXES, sp);
+    const n = cl.px.length;
+    if (n > CLOUD_BUDGET * 0.90 && n < CLOUD_BUDGET * 1.10) break;
+    sp *= Math.sqrt(n / CLOUD_BUDGET);
+  }
+  s.NP = cl.px.length;
+  s.nBoxes = BOXES.length;
+  s.cx3 = new Float32Array(cl.px); s.cy3 = new Float32Array(cl.py); s.cz3 = new Float32Array(cl.pz);
+  s.segs = cl.segs;
+  /* 取景：按展品真实投影轮廓定 3D 区高度与相机距离（扁平的 Apple II 和
+     又高又深的 PS/2 都能填满画面） */
+  const ex = projExtent(s);
+  s._ex = ex;
+  s.AHs = Math.max(18, Math.min(M_ROWS - 4, Math.round(AW * MW / (MH * (ex.w / ex.h)))));
+  s.mY0 = M_Y0 + Math.round((M_ROWS - s.AHs) / 2);
+  const aspect = (AW * MW) / (s.AHs * MH);
+  s.baseDist = Math.max((ex.h / 2) / TAN_Y, (ex.w / 2) / (TAN_Y * aspect)) * s.margin;
+  s._built = true;
+}
 
-/* ─────────────────────────── 8. 点云 → 字符渲染 ───────────────────────────
-   每帧：机型旋转 + 视线基合成一个 3×3 —— 每个点只做 9 次乘加就到了相机空间。
-   背面整段剔除（同一面法线相同），再把点散射进 3×3 超采样深度缓冲。          */
+/* ─────────────────────────── 7. 相机 · 散射 · 归约 ─────────────────────────── */
 let frameIdx = 0;
-const SBW = AW * SS, SBH = AH * SS;                 // 超采样缓冲 360 × 135
-const sbZ = new Float32Array(SBW * SBH);            // 深度（1e9 = 空）
-const sbL = new Float32Array(SBW * SBH);            // 亮度
-const sbR = new Float32Array(SBW * SBH);            // 原色 R
+const SBW = AW * SS, SBH = AH * SS;
+const sbZ = new Float32Array(SBW * SBH);
+const sbL = new Float32Array(SBW * SBH);
+const sbR = new Float32Array(SBW * SBH);
 const sbG = new Float32Array(SBW * SBH);
 const sbB = new Float32Array(SBW * SBH);
-const sbA = new Uint8Array(SBW * SBH);              // 强调色 ID（0 = 磷光）
-/* 归约后的每格数据 */
-const Lbuf = new Float32Array(AW * AH);             // 亮度（供 Sobel 用）
-const Cbuf = new Uint8Array(AW * AH);               // 覆盖率 0..SS*SS
-const Zbuf = new Float32Array(AW * AH);             // 最近深度
-const Abuf = new Uint8Array(AW * AH);               // 强调色 ID
-const Rbuf = new Float32Array(AW * AH * 3);         // 原色
-const SPX = [0, 1, 0, 1], SPY = [0, 0, 1, 1];       // splat 2×2 足迹
+const sbA = new Uint8Array(SBW * SBH);
+const Lbuf = new Float32Array(AW * AH);
+const Cbuf = new Uint8Array(AW * AH);
+const Zbuf = new Float32Array(AW * AH);
+const Abuf = new Uint8Array(AW * AH);
+const Rbuf = new Float32Array(AW * AH * 3);
+const SPX = [0, 1, 0, 1], SPY = [0, 0, 1, 1];
+/* 确定性随机表：散点抖动要用。博物馆里没有转场，所以只在未来加特写时才读它 */
+const RND = new Float32Array(4 * 80000);
 
-/* 每帧的相机：视线基 + 投影 + 镜头语法（hero / dolly / crane / macro） */
-function buildCam(s, time) {
+/* 展台上的相机：不用分镜语法，只有很慢的摆动 —— 展品自己在转 */
+function buildCam(s, t) {
   const AHs = s.AHs;
+  const sweep = (Math.sin(t * 0.21) * 0.30 + Math.sin(t * 0.085) * 0.10) * (s.spin || 1);
+  const tilt = Math.sin(t * 0.27) * 0.016;
+  const bobY = Math.sin(t * 0.47) * (s.R * 0.004);
 
-  const spinIn = Math.max(0, Math.min(1, (time - PRINT_T * .85) / 1.7));
-  /* 扫描式摆动：左右缓慢扫过约 ±26°，始终把正面留在镜头里（不做 360° 转台） */
-  const sweep = (Math.sin(time * 0.30) * 0.34 + Math.sin(time * 0.13) * 0.14) * spinIn * (s.spin || 1) * (s.shot === "orbit" ? 1.85 : 1);
-  const tilt = Math.sin(time * 0.42) * 0.02;
-
-  /* ── 镜头语法：14 个镜头不再共用同一台摄影机 ── */
-  let distMul = 1, elevAdd = 0, azAdd = 0, yOff = 0;
-  const u = Math.max(0, Math.min(1, time / s.dur));
-  const sm = u * u * (3 - 2 * u);
-  if (s.shot === "dolly") distMul = 1.26 - 0.50 * sm;                       // 由远推近
-  else if (s.shot === "crane") {                                            // 高角度俯冲落到平视
-    elevAdd = 32 * (1 - Math.min(1, sm / 0.62));
-    azAdd = -0.12 * (1 - sm);
-  } else if (s.shot === "macro") {                                          // 局部缓移
-    distMul = 0.72;
-    azAdd = 0.10 * Math.sin(time * 0.5);
-    yOff = (sm - 0.45) * s.R * 0.42;
-  }
-  const bobY = Math.sin(time * 0.62) * (s.R * 0.012) - yOff;
-
-  /* 视线基（与 projExtent 同一套约定：right/up/fwd） */
-  const e = (s.elev + elevAdd) * Math.PI / 180, az = s.az + azAdd, dist = s.dist * distMul;
+  const e = s.elev * Math.PI / 180, az = s.az, dist = s.baseDist;
   const ca = Math.cos(az), sa = Math.sin(az), ce = Math.cos(e), se = Math.sin(e);
-  const rx = ca, ry = 0, rz = -sa;                  // right
-  const ux = -se * sa, uy = ce, uz = -se * ca;      // up
-  const fx = -ce * sa, fy = -se, fz = -ce * ca;     // fwd（指向原点）
-  /* 机型旋转 R = Ry(sweep)·Rx(tilt)，行主序 */
+  const rx = ca, ry = 0, rz = -sa;
+  const ux = -se * sa, uy = ce, uz = -se * ca;
+  const fx = -ce * sa, fy = -se, fz = -ce * ca;
+
   const sy = Math.sin(sweep), cy = Math.cos(sweep);
   const tx = Math.sin(tilt), cx = Math.cos(tilt);
   const R = [cy, sy * tx, sy * cx, 0, cx, -tx, -sy, cy * tx, cy * cx];
-  /* A = V·R（V 的三行是 right/up/fwd） */
+
   const a00 = rx * R[0] + ry * R[3] + rz * R[6], a01 = rx * R[1] + ry * R[4] + rz * R[7], a02 = rx * R[2] + ry * R[5] + rz * R[8];
   const a10 = ux * R[0] + uy * R[3] + uz * R[6], a11 = ux * R[1] + uy * R[4] + uz * R[7], a12 = ux * R[2] + uy * R[5] + uz * R[8];
   const a20 = fx * R[0] + fy * R[3] + fz * R[6], a21 = fx * R[1] + fy * R[4] + fz * R[7], a22 = fx * R[2] + fy * R[5] + fz * R[8];
-  /* 平移：eye 在 fwd 的反方向 dist 处，bob 只改 y */
   const T0 = 0, T1 = uy * bobY, T2 = dist - fy * bobY;
 
   const aspect = (AW * MW) / (AHs * MH);
   const FY = (AHs / 2) / TAN_Y, FX = (AW / 2) / (TAN_Y * aspect);
   const CX0 = AW / 2, CY0 = AHs / 2;
-  const near = 1e-3;
+
   const flat = !S.mono;
   const bw = AW * SS, bh = AHs * SS;
-  return { AHs, bw, bh, bn: bw * bh, FX, FY, CX0, CY0, near, flat,
+  return { AHs, bw, bh, bn: bw * bh, FX, FY, CX0, CY0, near: 1e-3, flat,
            a00, a01, a02, a10, a11, a12, a20, a21, a22, T0, T1, T2 };
 }
 
-/* 一朵点云散射进超采样深度缓冲。
-   morphAmp>0 时按「爆散(radial) / 聚拢」偏移位置；alpha<1 时按每点随机值丢弃，做出溶解。 */
+/* 一朵点云散射进超采样深度缓冲（morph 通道留给以后做特写，现在走全量） */
 function splatCloud(px, py, pz, segs, cam, alpha, morphAmp, radial) {
   const rad = radial === true;
   const a00 = cam.a00, a01 = cam.a01, a02 = cam.a02;
@@ -1338,10 +1603,7 @@ function splatCloud(px, py, pz, segs, cam, alpha, morphAmp, radial) {
     const nvx = a00 * n[0] + a01 * n[1] + a02 * n[2];
     const nvy = a10 * n[0] + a11 * n[1] + a12 * n[2];
     const nvz = a20 * n[0] + a21 * n[1] + a22 * n[2];
-    /* 背面剔除：面法线在相机空间的 +z 分量决定它朝向还是背向镜头 */
-    if (nvz > 0.02) continue;
-    /* 相机空间光照：key + ambient + rim，再乘材质反照率
-       （反照率是关键 —— 否则同朝向的近黑凹槽与白色开关亮度完全一样） */
+    if (nvz > 0.02) continue;                                   // 背面剔除
     const lam = nvx * KX + nvy * KY + nvz * KZ;
     const az2 = nvz < 0 ? -nvz : nvz;
     const rim = Math.pow(1 - (az2 > 1 ? 1 : az2), RIM_POW);
@@ -1350,19 +1612,16 @@ function splatCloud(px, py, pz, segs, cam, alpha, morphAmp, radial) {
     const cr = flat ? sg.r : 1, cg = flat ? sg.g : 1, cb = flat ? sg.b : 1;
     const acc = sg.acc;
     for (let i = sg.s; i < sg.e; i++) {
-      /* 溶解：按每点随机值丢弃，alpha 越小剩得越少 */
       if (alpha < 1 && RND[4 * i] + 0.5 > alpha) continue;
       let x = px[i], y = py[i], z = pz[i];
       if (morphAmp > 0) {
         if (rad) {
-          /* 爆散：沿径向飞出去，再叠一点随机抖动，才不会像同心球壳 */
           const dl = Math.sqrt(x * x + y * y + z * z) || 1e-6;
           const k = morphAmp * 0.85 / dl;
           x += x * k + RND[4 * i + 1] * morphAmp;
           y += y * k + RND[4 * i + 2] * morphAmp;
           z += z * k + RND[4 * i + 3] * morphAmp;
         } else {
-          /* 聚拢：从一个随机球壳收缩回目标位置 */
           x += RND[4 * i + 1] * morphAmp * 0.85;
           y -= morphAmp * (0.55 + (RND[4 * i + 2] + 0.5) * 0.95);
           z += RND[4 * i + 3] * morphAmp * 0.55;
@@ -1388,7 +1647,6 @@ function splatCloud(px, py, pz, segs, cam, alpha, morphAmp, radial) {
   }
 }
 
-/* 归约：3×3 子像素 → 一个字符格 */
 function reduceToGrid(AHs, bw, flat) {
   for (let cy2 = 0; cy2 < AHs; cy2++) {
     for (let cx2 = 0; cx2 < AW; cx2++) {
@@ -1405,116 +1663,102 @@ function reduceToGrid(AHs, bw, flat) {
         }
       }
       const c2 = cy2 * AW + cx2;
-      Cbuf[c2] = cov;
-      Zbuf[c2] = zmin;
-      Abuf[c2] = acc;
+      Cbuf[c2] = cov; Zbuf[c2] = zmin; Abuf[c2] = acc;
       if (cov) {
         Lbuf[c2] = lsum / cov;
         if (flat) { Rbuf[c2 * 3] = r3 / cov; Rbuf[c2 * 3 + 1] = g3 / cov; Rbuf[c2 * 3 + 2] = b3 / cov; }
       } else Lbuf[c2] = 0;
     }
   }
-  /* 深度提示：越远越暗，让机器有前后层次（照 engine/three.py 的 depth_cue） */
+  /* 深度提示：越远越暗，展品才有前后层次 */
   let z0 = 1e9, z1 = -1e9;
   for (let i = 0; i < AHs * AW; i++) { const z = Zbuf[i]; if (z < 1e9) { if (z < z0) z0 = z; if (z > z1) z1 = z; } }
   if (z1 - z0 > 1e-6) {
     const k = 0.16 / (z1 - z0);
-    for (let i = 0; i < AHs * AW; i++) {
-      const z = Zbuf[i];
-      Lbuf[i] *= 1 - (z < 1e9 ? (z - z0) * k : 0);
-    }
+    for (let i = 0; i < AHs * AW; i++) Lbuf[i] *= 1 - (Zbuf[i] < 1e9 ? (Zbuf[i] - z0) * k : 0);
   }
 }
 
-/* 每帧：一台相机 + 一到两朵云（转场时旧机爆散、新机聚拢，共用同一张深度缓冲） */
-function renderMachine(s, time) {
-  const cam = buildCam(s, time);
+/* ─────────────────────────── 8. 绘制 ─────────────────────────── */
+const S = { i: 0, t: 0, mono: true, fade: 1, started: false,
+            mode: "hall", tourT: 0, paused: false };
+const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const STILL = Q0.get("still") === "1";
+let dtLast = 0;                      // 上一帧间隔，浮尘漂移用
+/* 电影模式 = 自动巡馆：24 件自动走一遍，清屏、带一条字幕和一条进度。
+   8.5 秒 × 24 ≈ 3′24″。它不是原来那支带旁白与字幕的成片（那个在 film.html），
+   而是这个展馆自己的「导览版本」—— 同一套点云、同一份展签。 */
+const TOUR_DWELL = parseFloat(Q0.get("dwell") || "8.5");   // ?dwell= 可加速巡馆自测
+
+function renderExhibit(s, t) {
+  const cam = buildCam(s, t);
   sbZ.fill(1e9, 0, cam.bn);
-  const mp = S.prev >= 0 ? Math.min(1, S.morph) : 1;
-  if (mp < 1) {
-    const pv = STAGES[S.prev];
-    const a = Math.min(1, mp / 0.52);                  // 旧机爆散
-    const b = Math.max(0, (mp - 0.40) / 0.60);         // 新机聚拢
-    if (a < 1) {
-      const ea = 1 - (1 - a) * (1 - a);
-      splatCloud(pv.cx3, pv.cy3, pv.cz3, pv.segs, cam, 1 - a * a, pv.R * 1.9 * ea, false);
-    }
-    if (b > 0) {
-      splatCloud(s.cx3, s.cy3, s.cz3, s.segs, cam, Math.min(1, 0.35 + b * 1.5), s.R * 1.9 * (1 - Math.pow(1 - b, 3)), false);
-    }
-  } else {
-    /* 插入镜「剖面」：点云沿径向炸开再合拢。IBM PC 5150 的历史意义就是开放架构，
-       把机器拆开给观众看，正好和这一镜的主题对上。 */
-    if (s.burst && time > s.burst[0] && time < s.burst[1]) {
-      const u = (time - s.burst[0]) / (s.burst[1] - s.burst[0]);
-      const amp = s.R * 2.0 * Math.sin(Math.PI * u);
-      splatCloud(s.cx3, s.cy3, s.cz3, s.segs, cam, 1, amp, true);
-    } else {
-      splatCloud(s.cx3, s.cy3, s.cz3, s.segs, cam, 1, 0, false);
-    }
-  }
+  splatCloud(s.cx3, s.cy3, s.cz3, s.segs, cam, 1, 0, false);
   reduceToGrid(cam.AHs, cam.bw, cam.flat);
+  return cam;
 }
 
-/* 主绘制 */
+/* 浮尘：展厅里那束光柱中的灰。只画在画布上，随场景一起缩放，
+   64 个点、每帧一次 fillText，代价可以忽略，但没有它画面就是死的。 */
+const DUST = [];
+for (let i = 0; i < 64; i++) {
+  DUST.push({
+    x: Math.random() * W, y: Math.random() * H,
+    vx: (Math.random() - 0.5) * 6, vy: -3 - Math.random() * 7,
+    r: 0.35 + Math.random() * 0.65, p: Math.random() * 6.283
+  });
+}
+function drawDust(dt, phD) {
+  ctx.font = "12px " + FONT;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let i = 0; i < DUST.length; i++) {
+    const d = DUST[i];
+    d.x += d.vx * dt; d.y += d.vy * dt;
+    if (d.y < -24) { d.y = H + 24; d.x = Math.random() * W; }
+    if (d.x < -24) d.x = W + 24; else if (d.x > W + 24) d.x = -24;
+    const a = (0.05 + 0.11 * (0.5 + 0.5 * Math.sin(d.p + S.t * 0.6))) * d.r;
+    ctx.fillStyle = phD + a.toFixed(3) + ")";
+    ctx.fillText("·", d.x, d.y);
+  }
+}
+
 function draw() {
-  const s = STAGES[S.stage];
+  const s = EXHIBITS[S.i];
   const phR = s.ph[0], phG = s.ph[1], phB = s.ph[2];
-  const ph = "rgb(" + phR + "," + phG + "," + phB + ")";
   const phD = "rgba(" + phR + "," + phG + "," + phB + ",";
-  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
-
-  if (S.ended) { drawEndCard(); return; }
-
-  renderMachine(s, S.st);
-  const L = Lbuf;
-  /* 转场过程中不要跑「自上而下打印」的扫描线和字符分级，
-     否则爆散/聚拢会被裁掉一半、只显示低密度字符 */
-  const morphing = S.prev >= 0 && S.morph < 1;
-  const reveal = morphing ? 1 : Math.min(1, Math.max(0, (S.st - 0.12) / PRINT_T));
-  const frontRow = reveal * (s.AHs + 6) - 4;
-  const dens = morphing ? 1 : Math.min(1, Math.max(0, (S.st - 0.75) / 1.25));
-  const giMax = Math.max(3, Math.round(3 + dens * (NRAMP - 4)));
-
-  /* 3D 区背景光晕 */
-  const gcx = M_X0 + AW * MW * .5, gcy = (M_Y0 + M_ROWS * .55) * CH;
-  const grd = ctx.createRadialGradient(gcx, gcy, 10, gcx, gcy, AW * MW * .64);
-  grd.addColorStop(0, phD + "0.10)");
-  grd.addColorStop(.55, phD + "0.030)");
-  grd.addColorStop(1, phD + "0)");
-  ctx.fillStyle = grd; ctx.fillRect(0, M_Y0 * CH, W, M_ROWS * CH);
+  ctx.clearRect(0, 0, W, H);
+  /* 射灯在极慢地呼吸（0.06 Hz），几乎看不出来，但画面因此不像一张静帧 */
+  const breath = 0.972 + 0.028 * Math.sin(S.t * 0.37);
+  ctx.globalAlpha = (1 - S.fade * 0.92) * breath;
+  drawDust(dtLast, phD);
+  const cam = renderExhibit(s, S.t);
 
   ctx.imageSmoothingEnabled = false;
-  const fadeMul = Math.min(1, Math.max(0, (S.st - 0.05) / 0.9));
-
-  for (let y = 0; y < s.AHs; y++) {
-    if (y > frontRow) break;
-    const inBand = (frontRow - y) < 2.4;
-    const py = (s.mY0 * CH) + y * MH;
+  const AHy = s.AHs;
+  for (let y = 0; y < AHy; y++) {
+    const py = s.mY0 * CH + y * MH;
     const rowOff = y * AW;
     for (let x = 0; x < AW; x++) {
       const i = rowOff + x;
       const cov = Cbuf[i];
-      if (cov === 0) continue;                      // 没被任何点命中 = 空
-      const lum = L[i];
+      if (cov === 0) continue;
+      const lum = Lbuf[i];
 
-      /* Sobel：空白邻居用自身亮度填，外轮廓因此不会产生假边
-         （外轮廓交给下面的覆盖率剪影，那才是点云白送的东西） */
+      /* Sobel：空白邻居用自身亮度填，外轮廓不会产生假边 */
       let edge = 0;
-      if (x > 0 && x < AW - 1 && y > 0 && y < s.AHs - 1) {
-        const a = Cbuf[i - AW - 1] ? L[i - AW - 1] : lum, b = Cbuf[i - AW] ? L[i - AW] : lum, c2 = Cbuf[i - AW + 1] ? L[i - AW + 1] : lum;
-        const d = Cbuf[i - 1] ? L[i - 1] : lum, f = Cbuf[i + 1] ? L[i + 1] : lum;
-        const g2 = Cbuf[i + AW - 1] ? L[i + AW - 1] : lum, h2 = Cbuf[i + AW] ? L[i + AW] : lum, k2 = Cbuf[i + AW + 1] ? L[i + AW + 1] : lum;
+      if (x > 0 && x < AW - 1 && y > 0 && y < AHy - 1) {
+        const a = Cbuf[i - AW - 1] ? Lbuf[i - AW - 1] : lum, b = Cbuf[i - AW] ? Lbuf[i - AW] : lum, c2 = Cbuf[i - AW + 1] ? Lbuf[i - AW + 1] : lum;
+        const d = Cbuf[i - 1] ? Lbuf[i - 1] : lum, f = Cbuf[i + 1] ? Lbuf[i + 1] : lum;
+        const g2 = Cbuf[i + AW - 1] ? Lbuf[i + AW - 1] : lum, h2 = Cbuf[i + AW] ? Lbuf[i + AW] : lum, k2 = Cbuf[i + AW + 1] ? Lbuf[i + AW + 1] : lum;
         const ex = (c2 + 2 * f + k2) - (a + 2 * d + g2);
         const ey = (g2 + 2 * h2 + k2) - (a + 2 * b + c2);
         edge = Math.max(0, Math.hypot(ex, ey) - 1.20) * 0.54;
         if (edge > 1) edge = 1;
       }
-      /* 剪影描边：覆盖率由满转空的那一圈 —— 直接来自点云，不用猜 */
+      /* 剪影描边：覆盖率由满转空的那一圈，点云白送 */
       let sil = 0;
       if (cov >= 2 && (Cbuf[i - 1] === 0 || Cbuf[i + 1] === 0 ||
-          (y > 0 && Cbuf[i - AW] === 0) || (y < s.AHs - 1 && Cbuf[i + AW] === 0))) sil = 1;
-      /* 覆盖率不足的格子是抗锯齿边缘，按比例柔化 */
+          (y > 0 && Cbuf[i - AW] === 0) || (y < AHy - 1 && Cbuf[i + AW] === 0))) sil = 1;
       const soft = Math.min(1, cov / (SS * SS * 0.55));
 
       let base = (lum - 0.035) / 0.62;
@@ -1522,12 +1766,10 @@ function draw() {
       base = Math.pow(base, 0.82);
       let v = base * 0.68 + edge * 0.50 + sil * 0.34;
       v *= 0.35 + 0.65 * soft;
-      if (inBand) v = Math.min(1, v + 0.30);
       if (v > 1) v = 1;
       if (v < 0.055) continue;
 
       const id = Abuf[i];
-      /* v→字符用 gamma 提亮（细字符在暗底上观感偏暗），v→颜色保持线性 */
       const gv = Math.pow(v, 0.75);
       let gi, ci;
       if (id > 0) {
@@ -1535,10 +1777,8 @@ function draw() {
         gi = Math.max(4, Math.round(gv * (NRAMP - 1)));
       } else {
         gi = Math.round(gv * (NRAMP - 1));
-        /* 颜色档与亮度解耦：暗格也给一个可见的磷光色，而不是黑 */
         ci = Math.min(NPHOS - 1, Math.round((0.34 + 0.66 * v) * (NPHOS - 1)));
       }
-      if (gi > giMax) gi = giMax;
       if (gi <= 0) continue;
 
       const dx = M_X0 + x * MW, dy = py;
@@ -1558,491 +1798,503 @@ function draw() {
     }
   }
 
-  /* 打印前沿亮线 */
-  if (frontRow < s.AHs && reveal < 1 && frontRow > -1) {
-    const fy = s.mY0 * CH + Math.max(0, Math.floor(frontRow)) * MH;
-    const lg = ctx.createLinearGradient(0, fy - MH, 0, fy + MH);
-    lg.addColorStop(0, phD + "0)"); lg.addColorStop(.5, phD + "0.5)"); lg.addColorStop(1, phD + "0)");
-    ctx.fillStyle = lg; ctx.fillRect(0, fy - MH, W, MH * 2);
-  }
-  /* 整体淡入 */
-  if (fadeMul < 1) { ctx.fillStyle = "rgba(0,0,0," + (1 - fadeMul) + ")"; ctx.fillRect(0, M_Y0 * CH, W, M_ROWS * CH); }
-  /* 换镜闪白 */
-  if (S.flash > 0.01) { ctx.fillStyle = "rgba(255,255,255," + (S.flash * 0.18) + ")"; ctx.fillRect(0, M_Y0 * CH, W, M_ROWS * CH); }
-
-  drawHeader(s);
-  drawLog(s);
-  drawGauge(s);
-  drawTimeline(s);
-  drawCaption(s);
-  drawFooter(s);
-
-  /* CRT 上电：一条亮线从屏幕中线炸开成整屏（只在片头 0.8s） */
-  if (S.stage === 0 && S.st < 0.80) {
-    const p = S.st / 0.80;
-    const hh = H * (1 - Math.pow(1 - p, 3));
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, W, H / 2 - hh / 2);
-    ctx.fillRect(0, H / 2 + hh / 2, W, H - (H / 2 + hh / 2));
-    const bl = (1 - p) * (1 - p);
-    ctx.fillStyle = "rgba(226,255,238," + (bl * 0.95) + ")";
-    ctx.fillRect(0, H / 2 - hh / 2 - 2, W, 3);
-    ctx.fillRect(0, H / 2 + hh / 2 - 1, W, 3);
-    if (p < 0.22) { ctx.fillStyle = "rgba(210,255,226," + (0.22 - p) * 2.4 + ")"; ctx.fillRect(0, 0, W, H); }
-  }
-
-  if (PREVIEW) previewPass(s);
+  /* 换展品时的一次淡入（用 globalAlpha 淡出展品本身，不铺黑 ——
+     画布是透明的，铺黑会露出一个矩形） */
+  ctx.globalAlpha = 1;
 }
 
-/* 顶栏 */
-/* ── 指数增长仪表 ──
-   50 年内存从 256 字节涨到 64GB，是 10^8 倍。线性轴上那根柱子永远是 0，
-   所以只能画对数轴 —— 在 log10 刻度上它是一条几乎笔直的斜线，这才看得出「一直在涨」。 */
-const MEM_LO = 2.0, MEM_HI = 11.0;        // log10 范围：100 B → 100 GB
-/* 内存一律用二进制单位（2^10/2^20/2^30）—— 这是硬件史里的通用口径，
-   M1 Mac mini 写 8 GB 就是 8 GB；用 10^9 除会显示成 9 GB，和 POST 面板对不上。 */
-function fmtMem(b) {
-  if (b >= 1073741824) return (b / 1073741824).toFixed(0) + " GB";
-  if (b >= 1048576) return (b / 1048576).toFixed(0) + " MB";
-  if (b >= 1024) return (b / 1024).toFixed(0) + " KB";
-  return b + " B";
-}
-function drawGauge(s) {
-  const phR = s.ph[0], phG = s.ph[1], phB = s.ph[2];
-  const phD = "rgba(" + phR + "," + phG + "," + phB + ",";
-  const col = 97, mb = s.mem || 256;
-  const lg = Math.log10(mb);
-  const t = Math.max(0, Math.min(1, (lg - MEM_LO) / (MEM_HI - MEM_LO)));
-  const N = 38, filled = Math.round(t * N);
-  let bar = "";
-  for (let i = 0; i < N; i++) bar += i < filled ? "█" : "·";
-  drawStr(5, col, "◈ MEMORY · LOG SCALE · SPAN 10^8", phD + ".62)", 15);
-  drawStr(6, col, bar, phD + ".90)", 17);
-  drawStr(7, col, fmtMem(mb) + "  ·  log10 = " + lg.toFixed(2), phD + ".52)", 14);
-}
+/* ─────────────────────────── 9. 展签 · 墙面 · 导航 ─────────────────────────── */
+const el = id => document.getElementById(id);
+const root = document.documentElement;
 
-/* 顶栏：标题 + 进度条 */
-function drawHeader(s) {
-  const pct = Math.round(((s.n - 1) + Math.min(1, S.st / s.dur)) / TOTAL * 100);
-  const barW = 18, fillN = Math.round(pct / 100 * barW);
-  const bar = "[" + "█".repeat(fillN) + "░".repeat(barW - fillN) + "]" + String(pct).padStart(4, " ") + "%";
-  const left = " PC-HISTORY POST ";
-  const mid = " STAGE " + String(s.n).padStart(2, "0") + "/" + TOTAL + " · " + s.year + " ";
-  const gap = Math.max(2, COLS - (3 + strCells(left) + strCells(mid) + strCells(bar) + 1));
-  const g1 = Math.floor(gap * 0.55), g2 = gap - g1;
-  drawStr(R_HEADER, 0, "╔══" + left + "═".repeat(g1) + mid + "═".repeat(g2) + bar + "╗",
-    "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",.75)");
+function fillLabel(s) {
+  el("lbGhost").textContent = s.no;
+  el("lbKicker").textContent = s.kicker;
+  el("lbTitle").textContent = s.tag;
+  el("lbCn").textContent = s.cn;
+  el("lbSpec").innerHTML = s.spec.map(r => "<dt>" + r[0] + "</dt><dd>" + r[1] + "</dd>").join("");
+  el("lbWhy").textContent = s.why;
+  el("lbDiff").innerHTML = s.diff;
+  el("lbHall").textContent = "展厅 " + ROMAN[s.hall - 1] + " · " + s.hallName;
+  el("label").scrollTop = 0;
+}
+const ROMAN = ["I", "II", "III", "IV", "V"];
+
+function fillWall(s) {
+  const h = HALLS[s.hall - 1];
+  el("wHall").textContent = "HALL " + ROMAN[s.hall - 1] + " · " + h.name;
+  el("wYears").textContent = h.years;
+  el("wNo").textContent = "№ " + s.no + " / " + TOTAL;
+  el("wPos").textContent = "本厅 " + EXHIBITS.filter(e => e.hall === s.hall).length + " 件";
+  /* 画布没有语义，给读屏留一句 */
+  document.getElementById("screen").setAttribute("aria-label",
+    s.year + " " + s.tag + "（" + s.cn + "）的点云三维展品，缓慢旋转");
+  root.style.setProperty("--ph", "rgb(" + s.ph.join(",") + ")");
 }
 
-/* 左上角 POST 日志面板（HUD，压在 3D 之上） */
-function drawLog(s) {
-  const typing = S.logIdx < s.post.length;
-  const x0 = (LOG_COL - 1) * CW, y0 = (R_LOG0 - 1) * CH + 6;
-  const w0 = LOG_W * CW + CW, h0 = LOG_ROWS * CH + 18;
-  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
-
-  ctx.fillStyle = "rgba(0,0,0,.87)"; ctx.fillRect(x0, y0, w0, h0);
-  ctx.strokeStyle = phC + ".26)"; ctx.lineWidth = 1; ctx.strokeRect(x0 + .5, y0 + .5, w0 - 1, h0 - 1);
-
-  const keep = LOG_ROWS - (typing ? 1 : 0);
-  const lines = S.logDone.slice(Math.max(0, S.logDone.length - keep));
-  const typingLine = typing ? s.post[S.logIdx].text.slice(0, S.logChars) : null;
-  for (let i = 0; i < lines.length; i++)
-    drawStr(R_LOG0 + i, LOG_COL, lines[i], phC + ".66)");
-  if (typingLine !== null) {
-    const r = R_LOG0 + lines.length;
-    drawStr(r, LOG_COL, typingLine, "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")");
-    if (Math.floor(nowMs() / 250) % 2 === 0)
-      drawStr(r, LOG_COL + strCells(typingLine), "█", "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")");
-  }
-}
-
-/* 底部年代轴：12 代全列出来，当前一代高亮（终端风格的"进度条"） */
-const R_TIME = 41;
-function drawTimeline(s) {
-  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
-  const bright = "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")";
-  const n = TIMELINE.length, span = COLS - 22, x0 = 11;
-  drawStr(R_TIME, x0, "─".repeat(span), phC + ".34)");
-  for (let i = 0; i < n; i++) {
-    const at = x0 + Math.round(i * span / (n - 1));
-    const cur = i === S.stage, done = i < S.stage;
-    const c = cur ? bright : (done ? phC + ".74)" : phC + ".40)");
-    drawStr(R_TIME, at, cur ? "▣" : "▫", c);
-    drawStr(R_TIME + 1, at - 1, TIMELINE[i], c);
-  }
-  /* 规格读数：把「这台机器是多少个点云采样出来的」直接写在画面上 */
-  const spec = "◈ POINT CLOUD " + s.NP.toLocaleString("en-US") + " PTS"
-    + "  ·  MESH " + s.nBoxes + " BOXES"
-    + "  ·  SS " + SS + "\u00d7" + SS;
-  drawStr(R_TIME + 2, COLS - strCells(spec) - 3, spec, phC + ".70)");
-}
-
-/* 字幕 */
-/* 右下角机型铭牌：按真实字宽右对齐，所以能放大到普通字符的两倍多 */
-const PLATE_SIZE = 27;
-function drawPlate(row, str, color, size) {
-  ctx.font = size + "px " + FONT;
-  ctx.fillStyle = color;
-  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  const chs = Array.from(str);
-  let total = 0;
-  for (const ch of chs) total += ctx.measureText(ch).width + 1.4;
-  let x = W - 3 * CW - total;
-  const y = row * CH + CH * 0.76;
-  for (const ch of chs) {
-    if (ch !== " ") ctx.fillText(ch, x, y);
-    x += ctx.measureText(ch).width + 1.4;
-  }
-  return W - 3 * CW - total;
-}
-function drawCaption(s) {
-  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
-  drawStr(R_DIV, 2, "─".repeat(COLS - 4), phC + ".42)");
-  let n = S.capChars;
-  if (n <= 0) { drawStr(R_CAP0, 3, "█", phC + ".9)"); }
-  else {
-    const n0 = strCells(s.cap[0]);
-    drawStr(R_CAP0, 3, cutByCells(s.cap[0], Math.min(n0, n)), "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")");
-    if (n > n0 + 2) drawStr(R_CAP0 + 1, 3, cutByCells(s.cap[1], n - n0 - 2), phC + ".96)");
-  }
-  /* 右下角铭牌：型号大字 + 中文名，中间一道按磷光色发亮的竖条 */
-  const plate = "rgb(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ")";
-  const x0 = drawPlate(R_CAP0, s.tag, plate, PLATE_SIZE);
-  ctx.fillStyle = plate;
-  ctx.fillRect(x0 - 16, R_CAP0 * CH + 1, 4, CH + 3);
-  drawPlate(R_CAP0 + 1, s.cn, phC + ".78)", 17);
-}
-
-/* 状态栏 */
-function drawFooter(s) {
-  const phC = "rgba(" + s.ph[0] + "," + s.ph[1] + "," + s.ph[2] + ",";
-  const audioLive = S.sound && AC && AC.state === "running";
-  const audioTag = !S.sound ? "OFF" : ((audioLive || STILL || RENDER_MODE) ? "ON " : "♪ 点击开启");
-  /* 录片时把快捷键提示换成一行静态标注：成片里的观众按不了键，
-     而「点一下画面开启音效」更是明显的谎 —— 音轨已经在文件里了。 */
-  if (RENDER_MODE) {
-    drawStr(R_STATUS, 3, "ASCII 3D · POINT CLOUD → CHARACTER · 14 STAGES 1975—2026", phC + ".55)");
-  } else {
-    drawStr(R_STATUS, 3, "SPACE 暂停   ←→ 切镜   R 重播   C " + (S.mono ? "单色→真彩" : "真彩→单色") +
-      "   M 音效 " + audioTag + "   F 全屏", phC + (audioLive || !S.sound ? ".80)" : ".52)"));
-    /* 键击声还没解锁时，顶栏右侧提示一句（浏览器自动播放策略要求先有一次用户交互） */
-    if (S.sound && !audioLive && !STILL && S.st > 1.4) {
-      const hint = "♪ 键盘敲击声 · 点一下画面或按任意键开启";
-      drawStr(1, COLS - 2 - strCells(hint), hint, phC + ".50)");
+let trackEls = [];
+function buildTrack() {
+  const t = el("track");
+  t.innerHTML = "";
+  EXHIBITS.forEach((e, i) => {
+    if (i && e.hall !== EXHIBITS[i - 1].hall) {
+      const g = document.createElement("i");
+      g.className = "hallgap";
+      t.appendChild(g);
     }
-  }
-  const right = (S.playing ? "▶ RUN" : "‖ PAUSE") + "   " + S.st.toFixed(1) + "s / " + s.dur.toFixed(1) + "s";
-  drawStr(R_STATUS, COLS - strCells(right) - 3, right, phC + ".80)");
+    const b = document.createElement("span");
+    b.dataset.i = i;
+    b.title = "№ " + e.no + " · " + e.year + " " + e.cn;
+    b.onclick = () => goTo(i);
+    t.appendChild(b);
+    e._track = b;
+  });
 }
 
-/* 结束卡 */
-function drawEndCard() {
-  const Q2 = [96, 220, 255];
-  const ph = "rgb(" + Q2[0] + "," + Q2[1] + "," + Q2[2] + ")";
-  const phd = "rgba(" + Q2[0] + "," + Q2[1] + "," + Q2[2] + ",";
-  const cx = 22, N = STAGES.length;
-  const title = N + " / " + TOTAL + " STAGES RENDERED";
-  drawStr(4, cx, "╔══════════════════════════════════════════════════════════════════════════╗", phd + ".45)");
-  drawStr(5, cx, "║  COMPLETE BUILD · " + title.padEnd(54, " ") + "║", ph);
-  drawStr(6, cx, "║  个人电脑发展史 · 终端 ASCII 3D 科普动画 · 1975 → 2026                    ║", phd + ".8)");
-  drawStr(7, cx, "╚══════════════════════════════════════════════════════════════════════════╝", phd + ".45)");
-  drawStr(10, cx, "  STAGE  YEAR   MACHINE                            POST     NOTE", phd + ".55)");
-  drawStr(11, cx, "  ───────────────────────────────────────────────────────────────────────────", phd + ".22)");
-  for (let i = 0; i < N; i++) {
-    const s = STAGES[i];
-    drawStr(12 + i, cx, "  " + String(s.n).padStart(3, "0") + "    " + s.year + "   " +
-      s.tag.padEnd(35, " ") + " OK     " + s.note,
-      i === N - 1 ? ph : phd + ".66)");
-  }
-  const y0 = 13 + N;
-  drawStr(y0, cx, "  " + N + " 代机型 · 每台都是点云采样后逐字符映射的 ASCII 3D，" +
-    "点云规模见每帧右下角读数。", phd + ".72)");
-  /* 内存增长火花线：14 格高度 = 世界对数量级的映射。
-     线性刻度下前 10 代全贴地（256 B 和 64 GB 差 10^8 倍），只有对数轴看出是斜线。 */
-  const SPK = "▁▂▃▄▅▆▇█";
-  const lgA = Math.log10(STAGES[0].mem), lgB = Math.log10(STAGES[N - 1].mem);
-  let spark = "";
-  for (let i = 0; i < N; i++) {
-    const q = (Math.log10(STAGES[i].mem) - lgA) / (lgB - lgA);
-    spark += SPK[Math.min(7, Math.max(0, Math.round(q * 7)))];
-  }
-  drawStr(y0 + 2, cx, "  MEMORY " + spark + "   " + fmtMem(STAGES[0].mem) + " → " +
-    fmtMem(STAGES[N - 1].mem) + " · 50 年 2.7×10^8 倍 · 对数刻度", phd + ".74)");
-  if (!RENDER_MODE) {
-    drawStr(y0 + 4, cx, "  R 重播      ← 回到第 " + N + " 代      → 下一镜      SPACE 暂停", phd + ".5)");
-    if (Math.floor(nowMs() / 400) % 2 === 0) drawStr(y0 + 4, cx + 62, "█", ph);
-  } else {
-    drawStr(y0 + 4, cx, "  █", ph);
-  }
+function buildGuide() {
+  let html = "";
+  HALLS.forEach((h, hi) => {
+    html += '<div class="gsec"><h3>HALL ' + ROMAN[hi] + ' · ' + h.name + ' · ' + h.years + ' — ' + h.note + '</h3>';
+    EXHIBITS.filter(e => e.hall === h.id).forEach(e => {
+      html += '<button class="gitem" data-i="' + e.i + '"><i>№ ' + e.no + '</i><u>' + e.year +
+              '</u><span>' + e.tag + ' · ' + e.cn + '</span><em>' + e.kicker.split(" · ")[1] + '</em></button>';
+    });
+    html += "</div>";
+  });
+  el("glist").innerHTML = html;
+  el("glist").onclick = ev => {
+    const b = ev.target.closest(".gitem");
+    if (b) { goTo(+b.dataset.i); closeGuide(); }
+  };
 }
 
-/* ─────────────────────────── 9. 调试：?preview=1 直接看深度/亮度缓冲 ─────────────────────────── */
-const Q = new URLSearchParams(location.search);
-const PREVIEW = Q.get("preview") === "1";
-const PVW = 480, PVH = 180;
-let pvCv = null, pvCtx = null, pvImg = null;
-/* 把归约后的亮度 × 覆盖率画成一张灰度图：检查点云密度与遮挡是否正确 */
-function previewPass(s) {
-  if (!pvCv) {
-    pvCv = document.createElement("canvas");
-    pvCv.width = PVW; pvCv.height = PVH;
-    pvCv.style.cssText = "position:fixed;left:8px;top:8px;z-index:80;border:1px solid #35ff66;image-rendering:pixelated";
-    document.body.appendChild(pvCv);
-    pvCtx = pvCv.getContext("2d");
-    pvImg = pvCtx.createImageData(PVW, PVH);
-  }
-  const d = pvImg.data;
-  const AHs = s.AHs;
-  const sx = PVW / AW, sy = PVH / AHs;
-  for (let y = 0; y < PVH; y++) {
-    const gy = Math.min(AHs - 1, y / sy | 0);
-    for (let x = 0; x < PVW; x++) {
-      const gx = Math.min(AW - 1, x / sx | 0);
-      const i = gy * AW + gx;
-      const p = (y * PVW + x) * 4;
-      const cov = Cbuf[i];
-      if (!cov) { d[p] = 6; d[p + 1] = 10; d[p + 2] = 7; d[p + 3] = 255; continue; }
-      const g = Math.min(255, Lbuf[i] * 330 * (0.35 + 0.65 * cov / (SS * SS * 0.55)));
-      d[p] = g * .45 | 0; d[p + 1] = g | 0; d[p + 2] = g * .55 | 0; d[p + 3] = 255;
-    }
-  }
-  pvCtx.putImageData(pvImg, 0, 0);
+function buildIntroHalls() {
+  el("introHalls").innerHTML = HALLS.map((h, i) => {
+    const first = EXHIBITS.find(e => e.hall === h.id).i;
+    const n = EXHIBITS.filter(e => e.hall === h.id).length;
+    return '<button class="hrow" data-i="' + first + '"><i>' + ROMAN[i] + '</i><b>' + h.name +
+           '</b><s>' + h.note + '</s><em>' + h.years + ' · ' + n + ' 件</em></button>';
+  }).join("");
+  el("introHalls").onclick = ev => {
+    const b = ev.target.closest(".hrow");
+    if (b) { enterMuseum(+b.dataset.i); }
+  };
 }
 
-/* ─────────────────────────── 10. 音效（极简 WebAudio） ─────────────────────────── */
-let AC = null, noiseBuf = null, hum = null, lastKeyT = 0;
-function audioInit() {
-  if (AC) return;
-  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
-  /* 衰减噪声：用作低频「咚」的底噪 */
-  const n = Math.floor(AC.sampleRate * 0.25);
-  noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
-  const d = noiseBuf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+/* file:// 下 history.replaceState 会抛 SecurityError（origin 为 null），
+   所以先试 replaceState，失败就退回只改 hash —— 双击打开也能拿到 #07 这种深链 */
+function setHash(no) {
+  const h = "#" + no;
+  if (location.hash === h) return;
+  try { history.replaceState(null, "", h); }
+  catch (e) { location.replace(h); }
 }
-/* 键盘敲击 = 高频撞击瞬态（噪声带通）+ 低频「thock」（下滑三角波）。
-   只用一个噪声 tick 会像鼠标点击；补上低频那一下才有键帽砸到定位板的实感。
-   每帧可能连打十几个字，所以内部限速到 ~32 次/秒，否则会连成一片嗡声。 */
-function keyClick(power) {
-  /* 录制模式：不发声，只把这一声的「动画时间 + 全部随机参数」记下来，
-     稍后用 OfflineAudioContext 按同一份参数合成音轨，保证和现场听到的一致。 */
-  if (RENDER_MODE) { recordClick(power); return; }
-  if (!AC || AC.state !== "running") return;
-  const t = AC.currentTime;
-  /* 打字速度是 80+ 字/秒，逐字发声会连成一片嗡声；限速到 ~30 次/秒。
-     间隔加抖动，否则听起来像节拍器而不是手在敲。 */
-  if (t - lastKeyT < (1 / 30) * (0.66 + Math.random() * 0.68)) return;
-  lastKeyT = t;
-  const v = power === undefined ? 1 : power;
-  /* 每次随机微调音高与滤波中心，避免听起来像同一个采样反复播 */
-  const j = 0.86 + Math.random() * 0.28;
-  /* 1) 撞击瞬态 */
-  const s = AC.createBufferSource(); s.buffer = noiseBuf;
-  s.playbackRate.value = 1.0 + Math.random() * 0.5;
-  const bp = AC.createBiquadFilter(); bp.type = "bandpass";
-  bp.frequency.value = 2400 * j; bp.Q.value = 1.4;
-  const hp = AC.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1300;
-  const g1 = AC.createGain();
-  g1.gain.setValueAtTime(0.055 * v, t);
-  g1.gain.exponentialRampToValueAtTime(0.0005, t + 0.017);
-  s.connect(bp); bp.connect(hp); hp.connect(g1); g1.connect(AC.destination);
-  s.start(t); s.stop(t + 0.03);
-  /* 2) 键帽砸到底的低频 thock */
-  const o = AC.createOscillator(), g2 = AC.createGain();
-  o.type = "triangle";
-  o.frequency.setValueAtTime(210 * j, t);
-  o.frequency.exponentialRampToValueAtTime(95, t + 0.042);
-  g2.gain.setValueAtTime(0.034 * v, t);
-  g2.gain.exponentialRampToValueAtTime(0.0004, t + 0.052);
-  o.connect(g2); g2.connect(AC.destination);
-  o.start(t); o.stop(t + 0.06);
-}
-function beep(freq, dur, vol) {
-  if (!AC || AC.state !== "running") return;
-  const o = AC.createOscillator(), g = AC.createGain();
-  o.type = "square"; o.frequency.value = freq;
-  g.gain.setValueAtTime(vol, AC.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
-  o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + dur + .02);
-}
-function humOn() {
-  if (!AC || hum) return;
-  const o1 = AC.createOscillator(), o2 = AC.createOscillator(), g = AC.createGain();
-  o1.type = "sine"; o1.frequency.value = 60; o2.type = "sine"; o2.frequency.value = 120; g.gain.value = 0.010;
-  o1.connect(g); o2.connect(g); g.connect(AC.destination); o1.start(); o2.start();
-  hum = { o1: o1, o2: o2, g: g };
-}
-function humOff() { if (hum) { try { hum.o1.stop(); hum.o2.stop(); } catch (e) { } hum = null; } }
-/* 浏览器自动播放策略：AudioContext 在用户第一次交互前是 suspended 的。
-   片中一开场就在打字，所以任何一个点击/按键都顺手把音频解锁。 */
-function audioUnlock() {
-  if (!S.sound) return;
-  audioInit();
-  if (AC && AC.state === "suspended") AC.resume();
-  humOn();
-}
-addEventListener("pointerdown", audioUnlock);
-addEventListener("keydown", audioUnlock);
 
-/* ─────────────────────────── 11. 交互 ─────────────────────────── */
+function goTo(i, silent) {
+  i = Math.max(0, Math.min(TOTAL - 1, i));
+  const moving = i !== S.i;
+  const s = EXHIBITS[i];
+  ensure(s);
+  S.i = i;
+  S.fade = STILL ? 0 : 1;          // 截图模式不淡入，三帧就能出成片效果
+  buildAtlas(s);
+  fillLabel(s);
+  fillWall(s);
+  EXHIBITS.forEach((e, k) => {
+    if (!e._track) return;
+    e._track.classList.toggle("on", k === i);
+    e._track.classList.toggle("seen", k < i);
+  });
+  document.querySelectorAll(".gitem").forEach(b => b.classList.toggle("cur", +b.dataset.i === i));
+  if (!silent) setHash(s.no);
+  S.started = true;
+  layout();                       // 每件展品的高宽比不同，缩放要重算
+  if (S.mode === "tour") { S.tourT = 0; filmCaption(s); filmProgress(); }
+  /* 展签重放一次进场动画（去掉类 → 强制回流 → 加回来） */
+  const lb = el("label");
+  lb.classList.remove("in");
+  void lb.offsetWidth;
+  lb.classList.add("in");
+  if (moving) whoosh(s.hall);
+}
+
+/* 序厅淡出之后彻底摘掉：留着它就是一个整屏的合成层。
+   但「回首页」要能把它拿回来，所以定时器挂在元素上，随时可以取消。 */
+function hideIntro() {
+  const v = el("intro");
+  clearTimeout(v._hideT);
+  if (v.style.display === "none") return;
+  v.classList.add("off");
+  v._hideT = setTimeout(() => { v.style.display = "none"; }, 340);
+}
+function showIntro() {
+  const v = el("intro");
+  clearTimeout(v._hideT);
+  v.style.display = "";
+  v.classList.remove("off");
+  /* 序厅用馆方的中性色，不借用某件展品的磷光 */
+  root.style.setProperty("--ph", "#7dffc0");
+  S.fade = 0;
+}
+function enterMuseum(i) {
+  hideIntro();
+  if (typeof i === "number") goTo(i, true);
+  S.fade = 1;
+}
+/* 回首页：先退出电影模式/关掉浮层，再把序厅放回来。
+   顺序不能反 —— setMode("hall") 自己会调 hideIntro()。 */
+function goHome() {
+  if (S.mode === "tour") setMode("hall");
+  el("filmEnd").classList.add("off");
+  el("guide").classList.add("off");
+  showIntro();
+  tick(0.8);
+}
+function openGuide() {
+  if (el("intro").classList.contains("off") === false) return;
+  buildGuide();
+  el("guide").classList.remove("off");
+}
+function closeGuide() { el("guide").classList.add("off"); }
+
+/* ── 电影模式（自动巡馆） ── */
+function firstSentence(t) {
+  const i = t.indexOf("。");
+  return i >= 0 ? t.slice(0, i + 1) : t;
+}
+function filmCaption(s) {
+  el("fCap").innerHTML = "<i>" + s.year + " · 展厅 " + ROMAN[s.hall - 1] + " " + s.hallName +
+    " · " + s.no + " / " + TOTAL + "</i><b>" + s.tag + "</b><span>" + s.cn + "</span>" +
+    "<p>" + firstSentence(s.why) + "</p>";
+}
+function filmProgress() {
+  const p = (S.i + Math.min(1, S.tourT / TOUR_DWELL)) / TOTAL;
+  el("fBar").style.width = (p * 100).toFixed(2) + "%";
+}
+function setMode(m) {
+  const was = S.mode;
+  S.mode = m;
+  const tour = m === "tour";
+  document.body.classList.toggle("tour", tour);
+  document.body.classList.remove("paused");
+  S.paused = false;
+  S.tourT = 0;
+  el("filmEnd").classList.add("off");
+  hideIntro();
+  el("guide").classList.add("off");
+  el("btnTour").lastChild.nodeValue = tour ? "退出" : "电影";
+  el("filmHint").textContent = "空格 暂停　·　ESC 退出　·　← → 换件";
+  if (tour) {
+    filmCaption(EXHIBITS[S.i]);
+    filmProgress();
+    S.fade = STILL ? 0 : 1;
+  }
+  layout();                       // 展位从「三分之二」变「整屏」，缩放要重算
+  if (tour && was !== "tour") chime(392, 523);        // 进片：G4 → C5
+  else if (!tour && was === "tour") chime(523, 392);  // 退片：反过来
+}
+function togglePause() {
+  S.paused = !S.paused;
+  document.body.classList.toggle("paused", S.paused);
+  el("filmHint").textContent = S.paused
+    ? "‖ 已暂停　·　空格 继续　·　ESC 退出"
+    : "空格 暂停　·　ESC 退出　·　← → 换件";
+}
+function endTour() {
+  S.paused = true;
+  document.body.classList.add("paused");
+  el("filmEnd").classList.remove("off");
+  chime(262, 196);                 // 闭馆：往下落的两声
+}
+
+
+/* ─────────────────────────── 10. 事件 ─────────────────────────── */
+el("prev").onclick = () => { tick(0.7); goTo(S.i - 1); };
+el("next").onclick = () => { tick(0.7); goTo(S.i + 1); };
+el("btnGuide").onclick = () => { tick(); openGuide(); };
+el("btnMono").onclick = () => { S.mono = !S.mono; el("btnMono").lastChild.textContent = S.mono ? "单色" : "真彩"; };
+el("btnFull").onclick = toggleFull;
+el("btnEnter").onclick = () => enterMuseum(0);
+el("btnHome").onclick = goHome;
+el("brand").onclick = goHome;
+el("btnSnd").onclick = () => setSound(!sndOn);
+el("btnTour").onclick = () => { tick(); setMode(S.mode === "tour" ? "hall" : "tour"); };
+el("btnTourIntro").onclick = () => setMode("tour");
+el("btnReplay").onclick = () => { goTo(0, true); setMode("tour"); };
+el("btnBackHall").onclick = () => { tick(); setMode("hall"); };
+el("guide").onclick = ev => { if (ev.target === el("guide")) closeGuide(); };
+
+function toggleFull() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+  else document.exitFullscreen?.();
+}
+
 addEventListener("keydown", ev => {
-  const k = ev.key.toLowerCase();
-  if (k === " " || ev.code === "Space") { ev.preventDefault(); S.playing = !S.playing; }
-  else if (ev.key === "ArrowRight") { ev.preventDefault(); goto(S.ended ? 0 : Math.min(STAGES.length - 1, S.stage + 1)); }
-  else if (ev.key === "ArrowLeft") { ev.preventDefault(); goto(Math.max(0, S.stage - 1)); }
-  else if (k === "r") resetStage(0);
-  else if (k === "c") S.mono = !S.mono;
-  else if (k === "m") {
-    S.sound = !S.sound;
-    if (S.sound) { audioInit(); if (AC && AC.state === "suspended") AC.resume(); humOn(); } else humOff();
-  } else if (k === "f") {
-    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+  const k = ev.key;
+  const introOpen = !el("intro").classList.contains("off");
+  /* 序厅还盖着的时候，方向键不该偷偷换展品 —— 只有 Enter / Esc / P 有意义 */
+  if (introOpen && k !== "Enter" && k !== "Escape" &&
+      k !== "p" && k !== "P" && k !== "m" && k !== "M") return;
+
+  /* 电影模式里空格是暂停，不是下一件 */
+  if (S.mode === "tour" && k === " ") { ev.preventDefault(); togglePause(); return; }
+  if (S.mode === "tour" && (k === "p" || k === "P")) { ev.preventDefault(); setMode("hall"); return; }
+  if (S.mode !== "tour" && (k === "p" || k === "P")) { ev.preventDefault(); setMode("tour"); return; }
+
+  if (k === "ArrowRight" || k === "PageDown" || k === " ") { ev.preventDefault(); goTo(S.i + 1); }
+  else if (k === "ArrowLeft" || k === "PageUp") { ev.preventDefault(); goTo(S.i - 1); }
+  else if (k === "Home") { ev.preventDefault(); goTo(0); }
+  else if (k === "End") { ev.preventDefault(); goTo(TOTAL - 1); }
+  else if (k === "g" || k === "G") { el("guide").classList.contains("off") ? openGuide() : closeGuide(); }
+  else if (k === "h" || k === "H") { goHome(); }
+  else if (k === "c" || k === "C") { el("btnMono").click(); }
+  else if (k === "m" || k === "M") { setSound(!sndOn); }
+  else if (k === "f" || k === "F") { toggleFull(); }
+  else if (k === "Escape") {
+    if (!el("filmEnd").classList.contains("off")) setMode("hall");
+    else if (S.mode === "tour") setMode("hall");
+    else if (!el("guide").classList.contains("off")) closeGuide();
+    else if (!introOpen) goHome();       // 展厅里按 ESC 就是「离开」；已经在首页就什么也不做
   }
+  else if (k === "Enter" && introOpen) { enterMuseum(0); }
 });
-addEventListener("click", () => { if (S.sound && AC && AC.state === "suspended") AC.resume(); });
 
-/* ?stage=N&freeze=T  → 定格在第 N 镜第 T 秒（供无头截图核对）
-   ?still=1           → 定格后只画几帧就停掉 rAF 循环，让无头截图立刻完成 */
-const QS = parseInt(Q.get("stage") || "0", 10);
-const QF = parseFloat(Q.get("freeze") || "NaN");
-const QSEEK = parseFloat(Q.get("seek") || "NaN");   // 从第 1 镜开始快进 N 秒（会正常切镜）
-const STILL = Q.get("still") === "1";
-/* ?audio=1 → 加载即解锁音频（配合 chrome --autoplay-policy=no-user-gesture-required
-   做无头验证：状态栏会从「♪ 点击开启」变成「ON」，说明 AudioContext 真的跑起来了） */
-if (Q.get("audio") === "1") { audioInit(); if (AC && AC.state === "suspended") AC.resume(); humOn(); }
+/* 敲一下玻璃：轻点展位给一声「嗒」 */
+el("view").addEventListener("click", () => tick(0.45));
 
-/* ── ?render=1：给 tools/render-video.mjs 逐帧录片用 ──
-   外部按固定 fps 反复调 __renderFrame(fps)，页面内部用 1/60 的细步长把
-   整条时间线确定性推进（不依赖 rAF、不依赖真实时钟），然后重画一帧。
-   总步数是固定的（总时长 × 60），所以整段视频只需推进一次，不是每帧重算。 */
-if (Q.get("render") === "1") {
-  RENDER_MODE = true;
-  const sub = 1 / 60;
-  window.__TOTAL_SEC = () => STAGES.reduce((a, s) => a + s.dur, 0);
-  window.__TOTAL_FRAMES = fps => Math.ceil(window.__TOTAL_SEC() * fps) + 1;
-  window.__renderFrame = function (fps) {
-    const target = rAcc + 1 / fps;
-    /* advance() 第一行是 `if (S.ended || !S.playing) return;` —— 录片时必须
-       保持 playing=true，否则只有第一帧真的推进，后面全是同一画面（踩过）。 */
-    S.playing = true;
-    while (rAcc < target - 1e-9) {
-      const d = Math.min(sub, target - rAcc);
-      advance(d); rAcc += d;
-    }
-    draw();
-    /* 辉光改成画进 canvas 里，并且**在小图上模糊**：CSS 的 #bloom 是整屏
-       1600×960 做 blur(7px) + screen 混合，软件合成下一帧要 900ms —— 光它
-       就占了录片 70% 的时间。这里改成先在 400×240（像素量 1/16）上模糊
-       2.2px 再放大混合，等效半径 ≈8.8px，观感几乎一样，一帧只要几毫秒。 */
-    bctx.clearRect(0, 0, 400, 240);
-    bctx.filter = "blur(2.2px)";
-    bctx.drawImage(screen, 0, 0, 400, 240);
-    bctx.filter = "none";
-    const sc = screen.getContext("2d");
-    sc.save();
-    sc.globalCompositeOperation = "screen";
-    sc.globalAlpha = 0.55;
-    sc.imageSmoothingEnabled = true;
-    sc.drawImage(bloom, 0, 0, 400, 240, 0, 0, W, H);
-    sc.restore();
-    document.getElementById("boot").classList.add("hide");
-    document.getElementById("flick").style.opacity = 0;
-    return { t: rAcc, stage: S.stage, ended: S.ended };
-  };
-  window.__CLICK_COUNT = () => CLICKS.length;
-  /* 用与现场完全相同的参数离线合成音轨，返回 16bit 立体声 WAV 的 base64 */
-  window.__renderAudio = async function () {
-    const sec = window.__TOTAL_SEC(), sr = 44100;
-    const off = new OfflineAudioContext(2, Math.ceil(sec * sr), sr);
-    const nb = off.createBuffer(1, Math.floor(sr * 0.08), sr);
-    { const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
-    /* 显像管底噪：60 + 120Hz，和 humOn() 一致 */
-    for (const [f, g] of [[60, 0.010], [120, 0.010]]) {
-      const o = off.createOscillator(), gg = off.createGain();
-      o.type = "sine"; o.frequency.value = f; gg.gain.value = g;
-      o.connect(gg); gg.connect(off.destination); o.start(0); o.stop(sec);
-    }
-    for (const [ct, v, j, rate] of CLICKS) {
-      if (ct >= sec) continue;
-      const s = off.createBufferSource(); s.buffer = nb; s.playbackRate.value = rate;
-      const bp = off.createBiquadFilter(); bp.type = "bandpass";
-      bp.frequency.value = 2400 * j; bp.Q.value = 1.4;
-      const hp = off.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1300;
-      const g1 = off.createGain();
-      g1.gain.setValueAtTime(0.055 * v, ct);
-      g1.gain.exponentialRampToValueAtTime(0.0005, ct + 0.017);
-      s.connect(bp); bp.connect(hp); hp.connect(g1); g1.connect(off.destination);
-      s.start(ct); s.stop(ct + 0.03);
-      const o = off.createOscillator(), g2 = off.createGain();
-      o.type = "triangle";
-      o.frequency.setValueAtTime(210 * j, ct);
-      o.frequency.exponentialRampToValueAtTime(95, ct + 0.042);
-      g2.gain.setValueAtTime(0.034 * v, ct);
-      g2.gain.exponentialRampToValueAtTime(0.0004, ct + 0.052);
-      o.connect(g2); g2.connect(off.destination);
-      o.start(ct); o.stop(ct + 0.06);
-    }
-    const buf = await off.startRendering();
-    /* 归一化到 -1.6dBFS，再打包成 16bit PCM WAV */
-    let peak = 0;
-    for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > peak) peak = a; } }
-    const g = peak > 1e-6 ? Math.min(1, 0.83 / peak) : 1;
-    const n = buf.length, bytes = 44 + n * 4, dv = new DataView(new ArrayBuffer(bytes));
-    const wr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
-    wr(0, "RIFF"); dv.setUint32(4, bytes - 8, true); wr(8, "WAVE"); wr(12, "fmt ");
-    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
-    dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true);
-    dv.setUint16(34, 16, true); wr(36, "data"); dv.setUint32(40, n * 4, true);
-    const L = buf.getChannelData(0), R = buf.getChannelData(1);
-    for (let i = 0; i < n; i++) {
-      dv.setInt16(44 + i * 4, Math.max(-32768, Math.min(32767, Math.round(L[i] * g * 32767))), true);
-      dv.setInt16(46 + i * 4, Math.max(-32768, Math.min(32767, Math.round(R[i] * g * 32767))), true);
-    }
-    const u8 = new Uint8Array(dv.buffer);
-    let bin = "";
-    for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-    return btoa(bin);
-  };
-  /* 录片时不要再起 rAF，画面完全由 __renderFrame 驱动 */
-  document.getElementById("boot").classList.add("hide");
-  /* CSS 的辉光层换成 __renderFrame 里的 canvas 合成（快 60 倍） */
-  bloom.style.display = "none";
+/* 触屏左右滑：手机上不靠键盘也能走 */
+(function () {
+  let x0 = null, y0 = null;
+  const v = el("view");
+  v.addEventListener("pointerdown", e => { x0 = e.clientX; y0 = e.clientY; });
+  v.addEventListener("pointerup", e => {
+    if (x0 === null) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy) * 1.6) goTo(S.i + (dx < 0 ? 1 : -1));
+    x0 = null;
+  });
+})();
+
+/* ─────────────────────────── 11. 声音 ───────────────────────────
+   一个音频文件都没有：房间底噪是棕噪声过 190Hz 低通，换件是一段带通噪声的
+   频率扫动，点击是 12 毫秒的高通噪声 —— 全部现场合成。
+   默认静音（浏览器的自动播放策略也不允许别的做法），点一下「♪ 音效」才开。 */
+let AC = null, NOISE = null, BED = null, sndOn = false, master = null;
+
+function initAudio() {
+  if (AC) return AC;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  AC = new Ctx();
+  master = AC.createGain();
+  master.gain.value = 0.9;
+  master.connect(AC.destination);
+  /* 2 秒棕噪声：低频更重、听起来像空气而不是电流 */
+  const n = AC.createBuffer(1, Math.floor(AC.sampleRate * 2), AC.sampleRate);
+  const d = n.getChannelData(0);
+  let v = 0;
+  for (let i = 0; i < d.length; i++) {
+    v = (v + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    d[i] = v * 3.2;
+  }
+  NOISE = n;
+  return AC;
 }
 
-/* ─────────────────────────── 12. 主循环 ─────────────────────────── */
-resetStage(isNaN(QS) ? 0 : Math.max(0, Math.min(STAGES.length - 1, QS)));
+function roomTone(on) {
+  if (!AC) return;
+  if (on && !BED) {
+    const t = AC.currentTime;
+    const src = AC.createBufferSource(); src.buffer = NOISE; src.loop = true;
+    const lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 190;
+    const g = AC.createGain(); g.gain.value = 0;
+    src.connect(lp); lp.connect(g); g.connect(master);
+    g.gain.linearRampToValueAtTime(0.05, t + 1.8);
+    src.start();
+    const hum = AC.createOscillator(), hg = AC.createGain();
+    hum.type = "sine"; hum.frequency.value = 50; hg.gain.value = 0;
+    hum.connect(hg); hg.connect(master);
+    hg.gain.linearRampToValueAtTime(0.009, t + 1.8);
+    hum.start();
+    BED = { src: src, g: g, hum: hum, hg: hg };
+  } else if (!on && BED) {
+    const t = AC.currentTime, b = BED;
+    b.g.gain.linearRampToValueAtTime(0, t + 0.4);
+    b.hg.gain.linearRampToValueAtTime(0, t + 0.4);
+    setTimeout(() => { try { b.src.stop(); b.hum.stop(); } catch (e) {} }, 600);
+    BED = null;
+  }
+}
 
-let last = performance.now(), frozen = false, stillN = 0, stopped = false;
-if (Q.get("end") === "1") { S.ended = true; S.playing = false; frozen = true; }
+/* 换件：一段很轻的气流，中心频率按展厅往上抬 —— 越往后越「新」 */
+function whoosh(hall) {
+  if (!sndOn || !AC) return;
+  const t = AC.currentTime, f = 760 + (hall || 1) * 130;
+  const src = AC.createBufferSource(); src.buffer = NOISE;
+  const bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.3;
+  bp.frequency.setValueAtTime(f * 0.55, t);
+  bp.frequency.exponentialRampToValueAtTime(f * 1.6, t + 0.20);
+  bp.frequency.exponentialRampToValueAtTime(f * 0.72, t + 0.55);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.13, t + 0.07);
+  g.gain.exponentialRampToValueAtTime(0.0006, t + 0.62);
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 0.7);
+}
 
+/* 一次极短的「嗒」，像展厅里继电器闭合 */
+function tick(v) {
+  if (!sndOn || !AC) return;
+  const t = AC.currentTime;
+  const src = AC.createBufferSource(); src.buffer = NOISE;
+  const hp = AC.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2300;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.075 * (v === undefined ? 1 : v), t);
+  g.gain.exponentialRampToValueAtTime(0.0004, t + 0.035);
+  src.connect(hp); hp.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 0.06);
+}
+
+/* 两个音的和弦，用于进出电影模式与闭馆 */
+function chime(f1, f2) {
+  if (!sndOn || !AC) return;
+  const t = AC.currentTime;
+  for (const p of [[f1, 0], [f2, 0.10]]) {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = "sine"; o.frequency.value = p[0];
+    const s0 = t + p[1];
+    g.gain.setValueAtTime(0.0001, s0);
+    g.gain.linearRampToValueAtTime(0.05, s0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0004, s0 + 1.35);
+    o.connect(g); g.connect(master);
+    o.start(s0); o.stop(s0 + 1.4);
+  }
+}
+
+function setSound(on) {
+  sndOn = !!on;
+  try { localStorage.setItem("pchm-snd", sndOn ? "1" : "0"); } catch (e) {}
+  const b = el("btnSnd");
+  b.textContent = sndOn ? "♪ 音效 开" : "♪ 音效 关";
+  b.classList.toggle("on", sndOn);
+  if (sndOn) {
+    initAudio();
+    if (AC && AC.state === "suspended") AC.resume();
+    roomTone(true);
+    tick(0.8);
+  } else {
+    roomTone(false);
+  }
+}
+
+
+/* 上次开过音效的话，这次等第一次点击/按键再唤醒（浏览器不允许提前放声） */
+(function bootSound() {
+  let want = false;
+  try { want = localStorage.getItem("pchm-snd") === "1"; } catch (e) {}
+  if (Q0.get("audio") === "1") want = true;
+  if (!want) return;
+  sndOn = true;
+  el("btnSnd").textContent = "♪ 音效 开";
+  el("btnSnd").classList.add("on");
+  /* ?audio=1 用于无头验证：直接建图，不等手势 */
+  if (Q0.get("audio") === "1") {
+    initAudio();
+    if (AC && AC.state === "suspended") AC.resume();
+    roomTone(true);
+    return;
+  }
+  const arm = () => {
+    initAudio();
+    if (AC && AC.state === "suspended") AC.resume();
+    roomTone(true);
+  };
+  addEventListener("pointerdown", arm, { once: true });
+  addEventListener("keydown", arm, { once: true });
+})();
+
+/* ─────────────────────────── 12. 启动 ─────────────────────────── */
+function initFromURL() {
+  const no = Q0.get("no");
+  if (no) {
+    const n = parseInt(no, 10);
+    if (n >= 1 && n <= TOTAL) return { i: n - 1, intro: false };
+  }
+  const h = location.hash.replace("#", "");
+  if (/^\d+$/.test(h)) {
+    const n = parseInt(h, 10);
+    if (n >= 1 && n <= TOTAL) return { i: n - 1, intro: false };
+  }
+  return { i: 0, intro: true };
+}
+
+buildTrack();
+buildIntroHalls();
+buildGuide();
+const boot = initFromURL();
+goTo(boot.i, true);
+if (!boot.intro) {
+  el("intro").classList.add("off");
+  S.started = true;
+} else {
+  S.fade = 0;
+  /* 序厅用馆方的中性色，不借用第 1 件展品的磷光 */
+  root.style.setProperty("--ph", "#7dffc0");
+}
+setHash(EXHIBITS[S.i].no);
+
+let last = performance.now(), stillN = 0;
 function loop(now) {
-  if (!stopped && !RENDER_MODE) requestAnimationFrame(loop);
-  const dtReal = Math.min(0.05, (now - last) / 1000);
+  const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-
-  if (!isNaN(QSEEK) && !frozen) {
-    const step = 1 / 60;
-    for (let t = 0; t < QSEEK; t += step) advance(step);
-    S.playing = false; frozen = true;
-  } else if (!isNaN(QF) && !frozen) {
-    const step = 1 / 60;
-    HOLD = true;                       // freeze 是「本镜内」的秒数，不跨镜
-    for (let t = 0; t < QF; t += step) advance(step);
-    S.playing = false; frozen = true;
-  } else if (!frozen) advance(dtReal);
-
+  dtLast = dt;
+  if (!REDUCE) S.t += dt;
+  if (S.fade > 0) S.fade = Math.max(0, S.fade - dt * 3.4);
+  /* 自动巡馆：到点就走到下一件；最后一件走完落结束卡 */
+  if (S.mode === "tour" && !S.paused) {
+    S.tourT += dt;
+    if (S.tourT >= TOUR_DWELL) {
+      if (S.i < TOTAL - 1) goTo(S.i + 1);
+      else { S.tourT = TOUR_DWELL; filmProgress(); endTour(); }
+    }
+    filmProgress();
+  }
   draw();
   frameIdx++;
-
+  if (Q0.get("probe")) document.title = "F" + frameIdx + " T" + S.tourT.toFixed(2) + " I" + S.i + " " + S.mode;
   bctx.clearRect(0, 0, 400, 240);
   bctx.drawImage(screen, 0, 0, 400, 240);
-
-  document.getElementById("boot").classList.add("hide");
-  document.getElementById("flick").style.opacity = (!STILL && Math.random() < 0.012) ? (Math.random() * 0.05) : 0;
-  if (STILL && frozen && ++stillN >= 3) stopped = true;
+  if (STILL && ++stillN >= 3) return;
+  requestAnimationFrame(loop);
 }
-if (!RENDER_MODE) requestAnimationFrame(loop);
+/* 展签占掉右边三分之一，展品在逻辑画布里左移，这里的缩放只负责铺满 */
+layout();
+requestAnimationFrame(loop);
+
+if (Q0.get("guide")) { el("intro").classList.add("off"); openGuide(); }
+/* ?tour=1 直接进电影模式，从第 N 件开始（可配合 ?no=） */
+if (Q0.get("tour")) setMode("tour");
+/* 调试：?tend=1 直接跳到巡馆结束卡 */
+if (Q0.get("tend")) endTour();
+
+/* 量尺寸用：?probe=1 把展签的盒模型写进 title，便于 --dump-dom 检查 */
+if (Q0.get("probe")) {
+  const L = el("label"), W2 = el("lbWhy");
+  const C = document.querySelector(".card").getBoundingClientRect();
+  document.title = ["SND" + (sndOn ? 1 : 0) + (AC ? "/" + AC.state : "/none") + "/bed" + (BED ? 1 : 0),
+    "EX" + EXHIBITS[S.i].no, Math.round(C.left), innerWidth,
+    document.documentElement.scrollWidth, document.body.scrollWidth,
+    Math.round(L.getBoundingClientRect().left), Math.round(L.clientWidth),
+    L.scrollWidth, Math.round(W2.getBoundingClientRect().left), Math.round(W2.getBoundingClientRect().right),
+    getComputedStyle(L).paddingRight, innerWidth].join(" | ");
+}
+
+/* 供截图脚本使用 */
+window.__go = n => { goTo(n - 1, true); draw(); bctx.clearRect(0, 0, 400, 240); bctx.drawImage(screen, 0, 0, 400, 240); };
+window.__SND = () => ({ on: sndOn, state: AC ? AC.state : null, bed: !!BED });
+window.__STATE = () => ({ i: S.i, no: EXHIBITS[S.i].no, np: EXHIBITS[S.i].NP, boxes: EXHIBITS[S.i].nBoxes });
+
 </script>
 </body>
 </html>

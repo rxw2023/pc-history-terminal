@@ -18,3 +18,10 @@ tools/subs.ass
 Thumbs.db
 desktop.ini
 *.tmp
+
+# WorkBuddy 应用标记与本地会话数据
+.wbapp_*.genie
+.workbuddy/
+
+# 发布镜像：由 cp index.html film.html site/ 生成，不入库
+site/
